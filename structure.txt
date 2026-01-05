@@ -43,6 +43,12 @@ ManifestWrap{
 }
 
 
+Pulling/Restoring/Syncing-back backup back would mean:
+- Downloading the manifest back
+- Checking changes
+- Applying corrections
+
+
 Dir:
 Files
 other dirs..
