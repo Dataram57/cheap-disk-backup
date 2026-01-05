@@ -1,0 +1,59 @@
+Manifest file should be in DIM format
+Manifest is always encrypted using the same key
+
+Files are encrypted using secret key and random salt (stored in the manifest)
+Naming files
+
+FileName = Hash(content, secret_key)
+
+Deleting a file means cleaning unused files --> Detection of unused hashes
+
+
+Adding a file would mean: registering new content hash (Hash(content))
+- Checking if such hash already exists --> then use its ID
+- Adding a new hash (remember new id)
+
+Changing a file would mean:
+- Checking if such hash already exists --> then use its ID
+- Adding a new hash (remember new id)
+- Marking the old hash as to be checked for cleaning.
+
+Removing a file would mean:
+- Marking the removed hash as to be checked for cleaning.
+
+Cleaning a hash would mean:
+- Checking if there is a file that still uses this hash --> if is then stop
+- If there is no file found then this hash can be deleted
+
+Replay attacks on Manifest file can completely break the decryption if salt generation is not at least predictible. (that's also why manifest file should be stored in many places, if not the whole backup)
+
+Protection against Replay attacks.
+- If it's done then there is nothing we can do.
+- 
+
+ManifestWrap{
+    Header: CUSTOM_META_DATA
+    Hash: Hash(Manifest)                //works like a sign
+    Manifest{
+        Manifest Creation Date: DATE
+        Base Dir: STRING
+        Dirs,Files,Links: [...],
+        Content Hashes: [...]
+    }
+}
+
+
+Dir:
+Files
+other dirs..
+
+Files (links, etc...) can only be listed aftere IN command.
+So when we search for changes in specific folder, we compare listed files till next IN command with current files in specific folder.
+
+It's important to note that dirs doesn't provide any content. Files do.
+
+HardLinks Should Be Forbidden!!!
+
+
+dir,DIRECTORY_NAME;
+file,FILE_NAME,RWX,;
