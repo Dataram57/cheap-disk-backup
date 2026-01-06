@@ -2,8 +2,14 @@ import os
 import stat
 import hashlib
 from pathlib import Path
+import importlib
+import shutil
+
+HOME_DIR = "./test_source"
+cloud = importlib.import_module("cloud_test")
 
 #================================================================
+# Manifest
 
 file_objects = open("objects.dim", "w")
 
@@ -18,25 +24,43 @@ def WriteObject(*args):
     file_objects.write(";\n")
 
 #================================================================
+# Content Hashes
 
-file_hashes = open("hashes.bin", "ab")
+file_hashes = open("hashes.dim", "w")
 
 content_hashes = []
+
+def sha256_file(path, chunk_size=8192):
+    sha256 = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(chunk_size), b""):
+            sha256.update(chunk)
+    return sha256.digest()
 
 def RegisterContent(file_path):
     hash_bytes = sha256_file(file_path)
     try:
         return content_hashes.index(hash_bytes)
     except ValueError:
+        #encrypt file
+        salt = 666
+        #upload new content (id=0 reserved for the manifest)
+        id = len(content_hashes)
+        cloud.upload(id + 1, file_path)
         #add new hash
         content_hashes.append(hash_bytes)
-        file_hashes.write(hash_bytes)
-        #register new content
-        
+        file_hashes.write(DimSanitize(hash_bytes.hex()) + "," + DimSanitize(salt) + ";\n")
         #return 
-        return len(content_hashes) - 1
+        return id
 
 #================================================================
+# scan
+
+#headers
+file_hashes.write("section,information;\n")
+file_hashes.write("title," + DimSanitize("Example Title") + ";\n")
+file_hashes.write("section,hashes;\n")
+file_objects.write("section,objects;\n")
 
 def cd_up(path_a, path_b):
     a_parts = Path(path_a).resolve().parts
@@ -51,23 +75,6 @@ def cd_up(path_a, path_b):
             break
 
     return len(a_parts) - common_length
-
-#Hardlinks should be forbidden
-def is_hardlink(path):
-    st = os.stat(path)
-    return st.st_nlink > 1
-
-
-def sha256_file(path, chunk_size=8192):
-    sha256 = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(chunk_size), b""):
-            sha256.update(chunk)
-    return sha256.digest()
-
-
-HOME_DIR = "/home/kebabmaster"
-print("base", HOME_DIR)
 
 count = 0
 last_root=HOME_DIR
@@ -114,3 +121,29 @@ for root, dirs, files in os.walk(HOME_DIR, onerror=lambda e: None, followlinks=F
             #print(f"{path} - {size} bytes")
         except (PermissionError, FileNotFoundError):
             pass
+
+#================================================================
+# Packing
+
+def join_files(file1, file2, output):
+    with open(output, "wb") as out:
+        for fname in (file1, file2):
+            with open(fname, "rb") as f:
+                out.write(f.read())
+
+file_objects.close()
+file_hashes.close()
+join_files("hashes.dim", "objects.dim", "combined.dim")
+
+# get integrity hash
+integrity_hash = sha256_file("combined.dim")
+
+# encrypt combine
+shutil.copy2("combined.dim", "combined.bin")
+
+# add integrity_hash
+with open("combined.bin", "ab") as out:
+    out.write(integrity_hash)
+
+#upload file
+cloud.upload(0, "combined.bin")
