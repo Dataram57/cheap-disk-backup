@@ -3,8 +3,36 @@ import stat
 import hashlib
 from pathlib import Path
 
-def last_n_path(path, n):
-    return "/".join(Path(path).parts[-n:])
+#================================================================
+
+file_objects = open("objects.dim", "w")
+
+def DimSanitize(arg):
+    return str(arg).replace("@", "@@").replace(",", "@,").replace(";", "@;")
+
+def WriteObject(*args):
+    for i, arg in enumerate(args):
+        file_objects.write(DimSanitize(arg))
+        if i < len(args) - 1:
+            file_objects.write(",")
+    file_objects.write(";\n")
+
+
+#================================================================
+
+def cd_up(path_a, path_b):
+    a_parts = Path(path_a).resolve().parts
+    b_parts = Path(path_b).resolve().parts
+
+    # Find common prefix length
+    common_length = 0
+    for a, b in zip(a_parts, b_parts):
+        if a == b:
+            common_length += 1
+        else:
+            break
+
+    return len(a_parts) - common_length
 
 #Hardlinks should be forbidden
 def is_hardlink(path):
@@ -30,12 +58,16 @@ for root, dirs, files in os.walk(HOME_DIR, onerror=lambda e: None, followlinks=F
 
     #check what kind of step
     if last_root != root:
-        if root.count('/') == last_root.count('/'):
-            print("out;")
-        print("in:", os.path.basename(root))
+        r = cd_up(last_root, root)
+        if r > 0:
+            WriteObject("out", r)
+        WriteObject("in", os.path.basename(root))
         last_root = root
 
     #register dir info
+    st = os.lstat(root)
+    WriteObject("stat", st.st_dev, st.st_ino, st.st_mode, st.st_uid, st.st_gid, st.st_nlink, st.st_size, st.st_mtime_ns)
+    
     #print("f")
 
     #study files
@@ -44,16 +76,17 @@ for root, dirs, files in os.walk(HOME_DIR, onerror=lambda e: None, followlinks=F
         try:
             st = os.lstat(path)
 
-            #print("name:", name)
-            #print("stat:", [st.st_dev, st.st_ino, st.st_mode, st.st_uid, st.st_gid, st.st_nlink, st.st_size, st.st_mtime_ns])
+            WriteObject("name", name)
+            WriteObject("stat", st.st_dev, st.st_ino, st.st_mode, st.st_uid, st.st_gid, st.st_nlink, st.st_size, st.st_mtime_ns)
+    #print("f")
             #cases
             if stat.S_ISREG(st.st_mode):
                 #file
-                #print("content:", sha256_file(path))
+                WriteObject("content", sha256_file(path))
                 1
             if stat.S_ISLNK(st.st_mode):
                 #link
-                #print("symlink:", os.readlink(path))
+                WriteObject("symlink", os.readlink(path))
                 1
 
 
