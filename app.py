@@ -29,16 +29,17 @@ for root, dirs, files in os.walk(HOME_DIR, onerror=lambda e: None, followlinks=F
             print("cd", os.path.basename(root))
             last_root = root
         try:
-            st = os.stat(path)
-            print(st)
-            #print(name)
-            if os.path.islink(path):
-                print("l", name)
-                print(st.mode, st.uid)
-                exit(0)
-                
-            else:
-                print("f", name, os.path.getsize(path), sha256_file(path))
+            st = os.lstat(path)
+
+            print("name:", name)
+            print("stat:", [st.st_dev, st.st_ino, st.st_mode, st.st_uid, st.st_gid, st.st_nlink, st.st_size, st.st_mtime_ns])
+            #cases
+            if stat.S_ISREG(st.st_mode):
+                #file
+                print("content:", sha256_file(path))
+            if stat.S_ISLNK(st.st_mode):
+                #link
+                print("symlink:", os.readlink(path))
 
 
             count += 1
