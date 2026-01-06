@@ -17,6 +17,24 @@ def WriteObject(*args):
             file_objects.write(",")
     file_objects.write(";\n")
 
+#================================================================
+
+file_hashes = open("hashes.bin", "ab")
+
+content_hashes = []
+
+def RegisterContent(file_path):
+    hash_bytes = sha256_file(file_path)
+    try:
+        return content_hashes.index(hash_bytes)
+    except ValueError:
+        #add new hash
+        content_hashes.append(hash_bytes)
+        file_hashes.write(hash_bytes)
+        #register new content
+        
+        #return 
+        return len(content_hashes) - 1
 
 #================================================================
 
@@ -45,14 +63,13 @@ def sha256_file(path, chunk_size=8192):
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(chunk_size), b""):
             sha256.update(chunk)
-    return sha256.hexdigest()
+    return sha256.digest()
 
 
-HOME_DIR = "./test"
+HOME_DIR = "/home/kebabmaster"
 print("base", HOME_DIR)
 
 count = 0
-countNameSizes = 0
 last_root=HOME_DIR
 for root, dirs, files in os.walk(HOME_DIR, onerror=lambda e: None, followlinks=False):
 
@@ -82,19 +99,18 @@ for root, dirs, files in os.walk(HOME_DIR, onerror=lambda e: None, followlinks=F
             #cases
             if stat.S_ISREG(st.st_mode):
                 #file
-                WriteObject("content", sha256_file(path))
+                WriteObject("content", RegisterContent(path))
                 1
             if stat.S_ISLNK(st.st_mode):
                 #link
                 WriteObject("symlink", os.readlink(path))
                 1
 
-
             count += 1
-            countNameSizes += len(name)
-            if count % 500 == 0:
-                print(count, countNameSizes)
-                exit(0)
+            if count % 1000 == 0:
+                print(count)
+
+
             #print(f"{path} - {size} bytes")
         except (PermissionError, FileNotFoundError):
             pass
