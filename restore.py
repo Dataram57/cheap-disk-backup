@@ -55,6 +55,7 @@ dimp = Dimperpreter(file_combined)
 section = None
 content_salt = []       #(salt, CachedFile)
 current_dir = base_dir
+current_target = current_dir
 while True:
     #read args
     args = dimp.Next()
@@ -86,7 +87,7 @@ while True:
                 print("reading hashes")
             else:
                 #register hash
-                content_salt.append((args[1], None))
+                content_salt.append([args[1], None])
         case "objects":
             if command == "section":
                 #init
@@ -95,12 +96,35 @@ while True:
                 #walk the tree
                 if command == "in":
                     current_dir = os.path.join(current_dir, args[1])
+                    current_target = current_dir
+                    os.makedirs(current_target, exist_ok=True)
                     print(current_dir)
                 elif command == "out":
                     i = int(args[1])
                     while i > 0:
                         i -= 1
                         current_dir = Path(current_dir).parent
+                    current_target = current_dir
+                elif command == "name":
+                    current_target = os.path.join(current_dir, args[1])
+                elif command == "stat":
+                    
+                    0
+                elif command == "content":
+                    #get salt
+                    p = content_salt[int(args[1])]
+                    if p[1] != None:
+                        #copy cached
+                        shutil.copyfile(p[1], current_target)
+                    else:
+                        #download
+                        cloud.download(int(args[1]) + 1, "temp.bin")
+                        #paste
+                        shutil.copyfile("temp.bin", current_target)
+                        #cache
+                        p[1] = current_target
+
+
 
                 0
 
