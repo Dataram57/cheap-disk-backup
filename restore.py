@@ -108,7 +108,13 @@ while True:
                 elif command == "name":
                     current_target = os.path.join(current_dir, args[1])
                 elif command == "stat":
-                    
+                    #apply meta
+                    os.chmod(current_target, int(args[3]))
+                    try:
+                        os.chown(current_target, int(args[4]), int(args[5]))
+                    except PermissionError:
+                        print("Skipping chown: insufficient permissions")
+                    os.utime(current_target, ns=(int(args[8]), int(args[8])))
                     0
                 elif command == "content":
                     #get salt
@@ -123,6 +129,12 @@ while True:
                         shutil.copyfile("temp.bin", current_target)
                         #cache
                         p[1] = current_target
+                elif command == "symlink":
+                    try:
+                        os.symlink(args[1], current_target)
+                    except FileExistsError:
+                        os.unlink(current_target)
+                        os.symlink(args[1], current_target)
 
 
 

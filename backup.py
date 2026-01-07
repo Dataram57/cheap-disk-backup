@@ -101,7 +101,6 @@ for root, dirs, files in os.walk(HOME_DIR, onerror=lambda e: None, followlinks=F
             st = os.lstat(path)
 
             WriteObject("name", name)
-            WriteObject("stat", st.st_dev, st.st_ino, st.st_mode, st.st_uid, st.st_gid, st.st_nlink, st.st_size, st.st_mtime_ns)
     #print("f")
             #cases
             if stat.S_ISREG(st.st_mode):
@@ -112,6 +111,9 @@ for root, dirs, files in os.walk(HOME_DIR, onerror=lambda e: None, followlinks=F
                 #link
                 WriteObject("symlink", os.readlink(path))
                 1
+
+            #write stat
+            WriteObject("stat", st.st_dev, st.st_ino, st.st_mode, st.st_uid, st.st_gid, st.st_nlink, st.st_size, st.st_mtime_ns)
 
             count += 1
             if count % 1000 == 0:
