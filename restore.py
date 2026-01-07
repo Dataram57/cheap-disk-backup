@@ -105,17 +105,19 @@ while True:
                         i -= 1
                         current_dir = Path(current_dir).parent
                     current_target = current_dir
-                elif command == "name":
+                elif command == "object":
                     current_target = os.path.join(current_dir, args[1])
                 elif command == "stat":
                     #apply meta
-                    os.chmod(current_target, int(args[3]))
-                    try:
+                    if stat.S_ISLNK(os.lstat(current_target).st_mode):
+                        #for links
+                        os.lchown(current_target, int(args[4]), int(args[5]))
+                    else:
+                        #for rest
+                        os.chmod(current_target, int(args[3]))
                         os.chown(current_target, int(args[4]), int(args[5]))
-                    except PermissionError:
-                        print("Skipping chown: insufficient permissions")
-                    os.utime(current_target, ns=(int(args[8]), int(args[8])))
-                    0
+                    #apply time meta
+                    os.utime(current_target, ns=(int(args[8]), int(args[8])), follow_symlinks=False)
                 elif command == "content":
                     #get salt
                     p = content_salt[int(args[1])]
@@ -131,10 +133,10 @@ while True:
                         p[1] = current_target
                 elif command == "symlink":
                     try:
-                        os.symlink(args[1], current_target)
+                        os.symlink(args[1], current_target, target_is_directory=(args[2]=="True"))
                     except FileExistsError:
                         os.unlink(current_target)
-                        os.symlink(args[1], current_target)
+                        os.symlink(args[1], current_target, target_is_directory=(args[2]=="True"))
 
 
 

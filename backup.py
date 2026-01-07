@@ -91,27 +91,27 @@ for root, dirs, files in os.walk(HOME_DIR, onerror=lambda e: None, followlinks=F
     #register dir info
     st = os.lstat(root)
     WriteObject("stat", st.st_dev, st.st_ino, st.st_mode, st.st_uid, st.st_gid, st.st_nlink, st.st_size, st.st_mtime_ns)
-    
-    #print("f")
 
     #study files
-    for name in files:
+    for name in files + dirs:
         path = os.path.join(root, name)
         try:
+            #skip next roots (dirs)
             st = os.lstat(path)
+            if stat.S_ISDIR(st.st_mode):
+                continue
 
-            WriteObject("name", name)
-    #print("f")
+            #Save data
+            WriteObject("object", name)
             #cases
             if stat.S_ISREG(st.st_mode):
                 #file
                 WriteObject("content", RegisterContent(path))
-                1
-            if stat.S_ISLNK(st.st_mode):
+            elif stat.S_ISLNK(st.st_mode):
                 #link
-                WriteObject("symlink", os.readlink(path))
-                1
-
+                WriteObject("symlink", os.readlink(path), os.path.isdir(path))
+            else:
+                print("Object type is not supported:", path)
             #write stat
             WriteObject("stat", st.st_dev, st.st_ino, st.st_mode, st.st_uid, st.st_gid, st.st_nlink, st.st_size, st.st_mtime_ns)
 
