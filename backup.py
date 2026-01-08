@@ -21,7 +21,7 @@ content_hashes = []         #store only hashes (salt is applied elsewhere)
 content_hashes_stay = []    #store only Booleans to mark if cloud stored content is still up to date
 is_update = False
 new_content_hashes = []     #store only hashees (salt is applied during the replace process)
-new_content_indexes = []
+new_content_hashes_mapper = []  #stores only new indexes
 
 def sha256_file(path, chunk_size=8192):
     sha256 = hashlib.sha256()
@@ -31,14 +31,19 @@ def sha256_file(path, chunk_size=8192):
     return sha256.digest()
 
 def RegisterContent(file_path):
+    global file_hashes
     hash_bytes = sha256_file(file_path)
     if is_update:
         try:
             # old content is allowed to stay unchanged on the cloud
-            content_hashes_stay[content_hashes.index(hash_bytes)] = True
+            id = content_hashes.index(hash_bytes)
+            content_hashes_stay[id] = True
+            return id
         except ValueError:
             # new hash found
             new_content_hashes.append(hash_bytes)
+            new_content_hashes_mapper.append(-1)
+            return -len(new_content_hashes)
     else:
         try:
             return content_hashes.index(hash_bytes)
@@ -71,9 +76,9 @@ def cd_up(path_a, path_b):
 
     return len(a_parts) - common_length
 
-def ScanObjects(start_path):
+def ScanObjects(start_path, output_path):
     #file
-    file_objects = open("objects.dim", "w")
+    file_objects = open(output_path, "w")
 
     #funcs
     def WriteObject(*args):
@@ -232,21 +237,153 @@ if is_update:
     # Update
 
     # Generate objects.dim
-    ScanObjects("./test_source")
+    ScanObjects("./test_source", "objects_new.dim")
 
-    #start writing hashes.dim
-        # Insert new hashes in place of unused
+    #objects.dim
+    file_objects = open("objects.dim", "w", encoding="utf-8")
+    def WriteObject(*args):
+        for i, arg in enumerate(args):
+            file_objects.write(DimSanitize(arg))
+            if i < len(args) - 1:
+                file_objects.write(",")
+        file_objects.write(";")
+    
+    #hashes.dim
+    upload_id_gen = len(content_hashes) + 1
+    file_hashes = open("hashes.dim", "w")
+    file_hashes.write("section,information;\n")
+    file_hashes.write("title," + DimSanitize("Example Title") + ";\n")
+    file_hashes.write("section,hashes;\n")
+    file_combined = open("combined.bin", "r", encoding="utf-8")
+    dimp_hashes = Dimperpreter(file_combined)
+    #scope to hashes
+    while True:
+        args = dimp_hashes.Next()
+        if args[0].strip() == "section":
+            if args[1] == "hashes":
+                break
+    #function for writing
+    file_hashes_next_id = 0
+    def WriteNextHashes(count):
+        while count > 0:
+            count -= 1
+            args = dimp_hashes.Next()
+            file_hashes.write(DimSanitize(args[0]) + "," + DimSanitize(args[1]) + ";\n")
+            file_hashes_next_id += 1
+    def SkipHash():
+        dimp_hashes.Next()
+        file_hashes_next_id += 1
 
-        # Remove content that no longer serves
-        # or
-        # Add more new content
-    # stop writing hashes.dim
+    #scan objects_new.dim
+    file_objects_new = open("objects_new.dim", "r", encoding="utf-8")
+    dimp = Dimperpreter(file_objects_new)
+    section = ""
+    current_dir = "./test_source"
+    current_target = current_dir
+    while True:
+        #read args
+        args = dimp.Next()
+        if not args:
+            break
+        command = args[0].strip()
 
-    #start rewriting objects.dim
+        #check end of current section
+        if command == "section":
+            match section:
+                case "objects":
+                    break
+            #update section
+            section = args[1].strip()
+
+        #states
+        match section:
+            case "objects":
+                #current_target
+                if command == "in":
+                    current_dir = os.path.join(current_dir, args[1])
+                    current_target = current_dir
+                elif command == "out":
+                    i = int(args[1])
+                    while i > 0:
+                        i -= 1
+                        current_dir = Path(current_dir).parent
+                    current_target = current_dir
+                elif command == "object":
+                    current_target = os.path.join(current_dir, args[1])
+                    print(current_target)
+                #content modifier
+                elif command == "*content":
+                    id_in_new = int(args[1])
+                    id = -1
+                    #correct id
+                    if new_content_hashes_mapper[id_in_new] != -1:
+                        #apply already inserted new hash
+                        id = new_content_hashes_mapper[id_in_new]
+                    else:
+                        #try to insert new hash
+                        id = -1
+                        try:
+                            id = content_hashes_stay.index(False)
+                        except:
+                            id = -1
+                        # update or upload
+                        salt = None
+                        if id != -1:
+                            #insert new hash
+                            content_hashes_stay[id] = True
+                            content_hashes[id] = new_content_hashes[id_in_new]
+                            #write up current hashes
+                            WriteNextHashes(id - file_hashes_next_id)
+                            SkipHash()
+
+                            #generate new entry
+                            #encrypt file
+                            salt = 444
+                
+                            #update in cloud
+                            cloud.update(id, current_target)
+
+                        else
+                            #put new id
+                            id = upload_id_gen
+                            upload_id_gen += 1
+
+                            #generate new entry
+                            #encrypt file
+                            salt = 444
+
+                            #upload new file into the cloud
+                            cloud.upload(id, current_target)
+                            
+                        #write new hash
+                        file_hashes.write(DimSanitize(new_content_hashes[id_in_new]) + "," + DimSanitize(salt) + ";\n")
+                        
+                        #save new id
+                        new_content_hashes_mapper[id_in_map] = id
+
+                    #correct args
+                    args[0] = "\ncontent"
+                    args[1] = str(id)
+                else
+        #write args
+        WriteObject(args)
+
+    #start deleting hashes that are not used
+    while file_hashes_next_id < len(content_hashes):
+        if content_hashes_stay[file_hashes_next_id]:
+            #save used hash
+            file_hashes.write(DimSanitize(args[0]) + "," + DimSanitize(args[1]) + ";\n")
+        else
+            #delete in the cloud
+            cloud.delete(file_hashes_next_id)
+            #save empty hash
+            file_hashes.write(",;\n")
+        #next id
+        file_hashes_next_id += 1
 
 else:
     # First Upload:
-
+    
     # init file hashes
     file_hashes = open("hashes.dim", "w")
     file_hashes.write("section,information;\n")
@@ -254,7 +391,7 @@ else:
     file_hashes.write("section,hashes;\n")
 
     # Generate objects.dim
-    ScanObjects("./test_source")
+    ScanObjects("./test_source", "objects.dim")
 
     # close hashes
     file_hashes.close()
