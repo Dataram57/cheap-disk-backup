@@ -4,6 +4,7 @@ import hashlib
 from pathlib import Path
 import importlib
 import shutil
+from Dimperpreter import Dimperpreter
 
 cloud = importlib.import_module("cloud_test")
 
@@ -16,7 +17,11 @@ def DimSanitize(arg):
 #================================================================
 # Content Hashes
 
-content_hashes = []
+content_hashes = []         #store only hashes (salt is applied elsewhere)
+content_hashes_stay = []    #store only Booleans to mark if cloud stored content is still up to date
+is_update = False
+new_content_hashes = []     #store only hashees (salt is applied during the replace process)
+new_content_indexes = []
 
 def sha256_file(path, chunk_size=8192):
     sha256 = hashlib.sha256()
@@ -27,19 +32,27 @@ def sha256_file(path, chunk_size=8192):
 
 def RegisterContent(file_path):
     hash_bytes = sha256_file(file_path)
-    try:
-        return content_hashes.index(hash_bytes)
-    except ValueError:
-        #encrypt file
-        salt = 666
-        #upload new content (id=0 reserved for the manifest)
-        id = len(content_hashes)
-        cloud.upload(id + 1, file_path)
-        #add new hash
-        content_hashes.append(hash_bytes)
-        file_hashes.write(DimSanitize(hash_bytes.hex()) + "," + DimSanitize(salt) + ";\n")
-        #return 
-        return id
+    if is_update:
+        try:
+            # old content is allowed to stay unchanged on the cloud
+            content_hashes_stay[content_hashes.index(hash_bytes)] = True
+        except ValueError:
+            # new hash found
+            new_content_hashes.append(hash_bytes)
+    else:
+        try:
+            return content_hashes.index(hash_bytes)
+        except ValueError:
+            #encrypt file
+            salt = 666
+            #upload new content (id=0 reserved for the manifest)
+            id = len(content_hashes)
+            cloud.upload(id + 1, file_path)
+            #add new hash
+            content_hashes.append(hash_bytes)
+            file_hashes.write(DimSanitize(hash_bytes.hex()) + "," + DimSanitize(salt) + ";\n")
+            #return 
+            return id
 
 #================================================================
 # scan
@@ -105,7 +118,7 @@ def ScanObjects(start_path):
                     id = RegisterContent(path)
                     if id < 0:
                         #id comes from the new hash list
-                        WriteObject("*content", id + 1)
+                        WriteObject("*content", -(id + 1))
                     else:
                         #hash is ok
                         WriteObject("content", id)
@@ -148,23 +161,104 @@ def PackManifest():
     with open("combined.bin", "ab") as out:
         out.write(integrity_hash)
 
-    #upload file
-    cloud.upload(0, "combined.bin")
-
 #================================================================
 # Main
 
-# init hashes
-file_hashes = open("hashes.dim", "w")
-file_hashes.write("section,information;\n")
-file_hashes.write("title," + DimSanitize("Example Title") + ";\n")
-file_hashes.write("section,hashes;\n")
 
-# Generate objects.dim
-ScanObjects("./test_source")
+# check if update
+if cloud.download(0, "combined.bin"):
+    #cut integrity hash
+    cut_size = 32
+    file_combined = open("combined.bin", "rb+")
+    # Go to end of file
+    file_combined.seek(0, os.SEEK_END)
+    file_combined_size = file_combined.tell()
+    if file_combined_size < cut_size:
+        raise ValueError("File is smaller than 32 bytes")
+    # Seek to where the last 32 bytes start
+    file_combined.seek(file_combined_size - cut_size)
+    # Read the last 32 bytes
+    integrity_hash = file_combined.read(cut_size)
+    # Truncate the file to remove those bytes
+    file_combined.truncate(file_combined_size - cut_size)
+    file_combined.close()
 
-# close hashes
-file_hashes.close()
+    #decrypt
+    #...
 
-# Generate Manifest
+    #check integrity_hash
+    if sha256_file("combined.bin") != integrity_hash:
+        #perform
+        print("hashes don't match")
+    else:
+        #load hashes
+        file_combined = open("combined.bin", "r", encoding="utf-8")
+        dimp = Dimperpreter(file_combined)
+        section = ""
+        while True:
+            #read args
+            args = dimp.Next()
+            if not args:
+                break
+            command = args[0].strip()
+
+            #check end of current section
+            if command == "section":
+                match section:
+                    case "hashes":
+                        break
+                #update section
+                section = args[1].strip()
+
+            #states
+            match section:
+                case "hashes":
+                    if command == "section":
+                        #init
+                        print("Reading hashes")
+                    else:
+                        #register hash
+                        content_hashes.append(bytes.fromhex(args[0]))
+                        content_hashes_stay.append(False)
+        #close dimp
+        file_combined.close()
+        del dimp
+        #all hashes are now loaded
+        print("Loaded " + str(len(content_hashes)) + " content hashes.")
+        #mark update flag
+        is_update = True
+
+if is_update:
+    # Update
+
+    # Generate objects.dim
+    ScanObjects("./test_source")
+
+    #start writing hashes.dim
+        # Insert new hashes in place of unused
+
+        # Remove content that no longer serves
+        # or
+        # Add more new content
+    # stop writing hashes.dim
+
+    #start rewriting objects.dim
+
+else:
+    # First Upload:
+
+    # init file hashes
+    file_hashes = open("hashes.dim", "w")
+    file_hashes.write("section,information;\n")
+    file_hashes.write("title," + DimSanitize("Example Title") + ";\n")
+    file_hashes.write("section,hashes;\n")
+
+    # Generate objects.dim
+    ScanObjects("./test_source")
+
+    # close hashes
+    file_hashes.close()
+
+# Finishing
 PackManifest()
+cloud.upload(0, "combined.bin")

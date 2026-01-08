@@ -50,16 +50,6 @@ Pulling/Restoring/Syncing-back backup back would mean:
 
 
 
-1. Generate differences
-- objects_pre.dim (with content* indicating new hashes)
-- hash_stay.dim (with empty slots for new hashes)
-- hash_new.dim
-2. Insert new hashes
-- Generate hash.dim out of hash_stay.dim (with new hashes inserted) and hash_new.dim 
-- Remember indexes of the new inserted hashes
-3. Correct objects.dim
-- Generate new objects.dim from objects_pre.dim, but with content* replaced by new proper ids.
-4. Combine hashes.dim + objects.dim = all is done
 
 Dir:
 Files
