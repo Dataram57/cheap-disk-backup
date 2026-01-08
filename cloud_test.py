@@ -2,13 +2,15 @@ import os
 import shutil
 
 def upload(id, file_path):
+    print("Uploading:", id, file_path)
     try:
         shutil.copy2(file_path, "./test_cloud/" + str(id))
         return True
     except:
         return False
 
-def replace(id, file_path):
+def update(id, file_path):
+    print("Updating:", id, file_path)
     try:
         shutil.copy2(file_path, "./test_cloud/" + str(id))
         return True
@@ -16,6 +18,7 @@ def replace(id, file_path):
         return False
 
 def delete(id):
+    print("Deleting:", id)
     try:
         os.remove("./test_cloud/" + str(id))
         return True
@@ -23,6 +26,7 @@ def delete(id):
         return False
 
 def download(id, file_path):
+    print("Downloading:", id, file_path)
     try:
         shutil.copy2("./test_cloud/" + str(id), file_path)
         return True

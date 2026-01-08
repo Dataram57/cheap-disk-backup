@@ -241,7 +241,7 @@ if is_update:
 
     #objects.dim
     file_objects = open("objects.dim", "w", encoding="utf-8")
-    def WriteObject(*args):
+    def WriteObject(args):
         for i, arg in enumerate(args):
             file_objects.write(DimSanitize(arg))
             if i < len(args) - 1:
@@ -249,7 +249,7 @@ if is_update:
         file_objects.write(";")
     
     #hashes.dim
-    upload_id_gen = len(content_hashes) + 1
+    upload_id_gen = len(content_hashes)
     file_hashes = open("hashes.dim", "w")
     file_hashes.write("section,information;\n")
     file_hashes.write("title," + DimSanitize("Example Title") + ";\n")
@@ -259,18 +259,23 @@ if is_update:
     #scope to hashes
     while True:
         args = dimp_hashes.Next()
+        if len(args) == 0:
+            print("COURRPTED MANIFEST")
+            exit(0)
         if args[0].strip() == "section":
             if args[1] == "hashes":
                 break
     #function for writing
     file_hashes_next_id = 0
     def WriteNextHashes(count):
+        global file_hashes_next_id
         while count > 0:
             count -= 1
             args = dimp_hashes.Next()
             file_hashes.write(DimSanitize(args[0]) + "," + DimSanitize(args[1]) + ";\n")
             file_hashes_next_id += 1
     def SkipHash():
+        global file_hashes_next_id
         dimp_hashes.Next()
         file_hashes_next_id += 1
 
@@ -341,9 +346,15 @@ if is_update:
                             salt = 444
                 
                             #update in cloud
-                            cloud.update(id, current_target)
+                            cloud.update(id + 1, current_target)
 
-                        else
+                        else:
+                            #skip deleting and copy remaining hashes
+                            while file_hashes_next_id < len(content_hashes):
+                                args = dimp_hashes.Next()
+                                file_hashes.write(DimSanitize(args[0].strip()) + "," + DimSanitize(args[1].strip()) + ";\n")
+                                file_hashes_next_id += 1
+
                             #put new id
                             id = upload_id_gen
                             upload_id_gen += 1
@@ -353,33 +364,43 @@ if is_update:
                             salt = 444
 
                             #upload new file into the cloud
-                            cloud.upload(id, current_target)
+                            cloud.upload(id + 1, current_target)
                             
                         #write new hash
-                        file_hashes.write(DimSanitize(new_content_hashes[id_in_new]) + "," + DimSanitize(salt) + ";\n")
+                        file_hashes.write(DimSanitize(new_content_hashes[id_in_new].hex()) + "," + DimSanitize(salt) + ";\n")
                         
                         #save new id
-                        new_content_hashes_mapper[id_in_map] = id
+                        new_content_hashes_mapper[id_in_new] = id
 
                     #correct args
                     args[0] = "\ncontent"
                     args[1] = str(id)
-                else
         #write args
         WriteObject(args)
+    #close objects.dim
+    file_objects.close()
+    #close objects_new.dim
+    file_objects_new.close()
+    del dimp
 
     #start deleting hashes that are not used
     while file_hashes_next_id < len(content_hashes):
+        args = dimp_hashes.Next()
         if content_hashes_stay[file_hashes_next_id]:
             #save used hash
-            file_hashes.write(DimSanitize(args[0]) + "," + DimSanitize(args[1]) + ";\n")
-        else
+            file_hashes.write(DimSanitize(args[0].strip()) + "," + DimSanitize(args[1].strip()) + ";\n")
+        else:
             #delete in the cloud
-            cloud.delete(file_hashes_next_id)
+            cloud.delete(file_hashes_next_id + 1)
             #save empty hash
             file_hashes.write(",;\n")
         #next id
         file_hashes_next_id += 1
+    #close hashes.dim
+    file_hashes.close()
+    #close combined.bin
+    file_combined.close()
+    del dimp_hashes
 
 else:
     # First Upload:
