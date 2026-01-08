@@ -1,6 +1,7 @@
 **.dim
 **.bin
 **.pyc
+**.config.json
 
 test_source/**
 test_cloud/**

@@ -6,7 +6,8 @@ import importlib
 import shutil
 from Dimperpreter import Dimperpreter
 
-cloud = importlib.import_module("cloud_test")
+#cloud = importlib.import_module("cloud_test")
+cloud = importlib.import_module("cloud_boto3")
 
 #================================================================
 # Manifest
