@@ -40,10 +40,15 @@ def RegisterContent(file_path):
             content_hashes_stay[id] = True
             return id
         except ValueError:
-            # new hash found
-            new_content_hashes.append(hash_bytes)
-            new_content_hashes_mapper.append(-1)
-            return -len(new_content_hashes)
+            # hash is new to content_hashes
+            try:
+                # try to find it in the new_content_hashes
+                return -(new_content_hashes.index(hash_bytes) + 1)
+            except ValueError:
+                # new hash found
+                new_content_hashes.append(hash_bytes)
+                new_content_hashes_mapper.append(-1)
+                return -len(new_content_hashes)
     else:
         try:
             return content_hashes.index(hash_bytes)
@@ -272,7 +277,7 @@ if is_update:
         while count > 0:
             count -= 1
             args = dimp_hashes.Next()
-            file_hashes.write(DimSanitize(args[0]) + "," + DimSanitize(args[1]) + ";\n")
+            file_hashes.write(DimSanitize(args[0].strip()) + "," + DimSanitize(args[1]) + ";\n")
             file_hashes_next_id += 1
     def SkipHash():
         global file_hashes_next_id
