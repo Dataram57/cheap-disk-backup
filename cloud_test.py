@@ -1,6 +1,9 @@
 import os
 import shutil
 
+def initialize():
+    0
+
 def upload(id, file_path):
     print("Uploading:", id, file_path)
     try:

@@ -35,6 +35,7 @@
             packages = [
                 pkgs.python3
                 pkgs.python313Packages.boto3
+                pkgs.python313Packages.cryptography
             ];
         };
     };

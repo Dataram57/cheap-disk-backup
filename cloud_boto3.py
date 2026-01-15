@@ -17,6 +17,9 @@ s3 = boto3.client(
     aws_secret_access_key=aws_secret_access_key,
 )
 
+def initialize():
+    0
+
 def upload(id, file_path):
     print("Uploading:", id, file_path)
     try:

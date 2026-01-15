@@ -6,8 +6,9 @@ import importlib
 import shutil
 from Dimperpreter import Dimperpreter
 
-#cloud = importlib.import_module("cloud_test")
-cloud = importlib.import_module("cloud_boto3")
+cloud = importlib.import_module("cloud_test")
+#cloud = importlib.import_module("cloud_boto3")
+crypto = importlib.import_module("crypto_dr57_sha256stream")
 
 #================================================================
 # Manifest
@@ -54,14 +55,17 @@ def RegisterContent(file_path):
         try:
             return content_hashes.index(hash_bytes)
         except ValueError:
+            #get salt
+            salt = crypto.generate_salt()
             #encrypt file
-            salt = 666
+            output_path = "temp_file.bin"
+            crypto.encrypt(file_path, output_path, salt)
             #upload new content (id=0 reserved for the manifest)
             id = len(content_hashes)
-            cloud.upload(id + 1, file_path)
+            cloud.upload(id + 1, output_path)
             #add new hash
             content_hashes.append(hash_bytes)
-            file_hashes.write(DimSanitize(hash_bytes.hex()) + "," + DimSanitize(salt) + ";\n")
+            file_hashes.write(DimSanitize(hash_bytes.hex()) + "," + DimSanitize(salt.hex()) + ";\n")
             #return 
             return id
 
@@ -166,7 +170,8 @@ def PackManifest():
     integrity_hash = sha256_file("combined.dim")
 
     # encrypt combine
-    shutil.copy2("combined.dim", "combined.bin")
+    crypto.encrypt("combined.dim", "combined.bin")
+    #shutil.copy2("combined.dim", "combined.bin")
 
     # add integrity_hash
     with open("combined.bin", "ab") as out:
@@ -195,7 +200,8 @@ if cloud.download(0, "combined.bin"):
     file_combined.close()
 
     #decrypt
-    #...
+    crypto.decrypt("combined.bin", "combined_decrypted.bin")
+    os.replace("combined_decrypted.bin", "combined.bin")
 
     #check integrity_hash
     if sha256_file("combined.bin") != integrity_hash:
@@ -348,8 +354,11 @@ if is_update:
                             SkipHash()
 
                             #generate new entry
+                            #get salt
+                            salt = crypto.generate_salt()
                             #encrypt file
-                            salt = 444
+                            output_path = "temp_file.bin"
+                            crypto.encrypt(current_target, output_path, salt)
                 
                             #update in cloud
                             cloud.update(id + 1, current_target)
@@ -366,14 +375,17 @@ if is_update:
                             upload_id_gen += 1
 
                             #generate new entry
+                            #get salt
+                            salt = crypto.generate_salt()
                             #encrypt file
-                            salt = 444
+                            output_path = "temp_file.bin"
+                            crypto.encrypt(current_target, output_path, salt)
 
                             #upload new file into the cloud
-                            cloud.upload(id + 1, current_target)
+                            cloud.upload(id + 1, output_path)
                             
                         #write new hash
-                        file_hashes.write(DimSanitize(new_content_hashes[id_in_new].hex()) + "," + DimSanitize(salt) + ";\n")
+                        file_hashes.write(DimSanitize(new_content_hashes[id_in_new].hex()) + "," + DimSanitize(salt.hex()) + ";\n")
                         
                         #save new id
                         new_content_hashes_mapper[id_in_new] = id
