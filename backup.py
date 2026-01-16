@@ -5,6 +5,9 @@ from pathlib import Path
 import importlib
 import shutil
 from Dimperpreter import Dimperpreter
+import struct
+
+BUFFER_SIZE = 1024 * 1024
 
 cloud = importlib.import_module("cloud_test")
 #cloud = importlib.import_module("cloud_boto3")
@@ -170,12 +173,23 @@ def PackManifest():
     integrity_hash = sha256_file("combined.dim")
 
     # encrypt combine
-    crypto.encrypt("combined.dim", "combined.bin")
-    #shutil.copy2("combined.dim", "combined.bin")
+    salt = crypto.generate_salt()
+    crypto.encrypt("combined.dim", "combined.enc.bin", salt)
 
-    # add integrity_hash
-    with open("combined.bin", "ab") as out:
-        out.write(integrity_hash)
+    # write file
+    with open("combined.bin", "wb") as out_file:
+        #write hash + salt
+        out_file.write(integrity_hash)
+        out_file.write(struct.pack("I", len(salt)))
+        out_file.write(salt)
+        #write encrypted combined.dim
+        with open("combined.enc.bin", "rb") as in_file:
+            while True:
+                chunk = in_file.read(BUFFER_SIZE)
+                if not chunk:
+                    break
+                out_file.write(chunk)
+
 
 #================================================================
 # Main
@@ -183,24 +197,20 @@ def PackManifest():
 
 # check if update
 if cloud.download(0, "combined.bin"):
-    #cut integrity hash
-    cut_size = 32
-    file_combined = open("combined.bin", "rb+")
-    # Go to end of file
-    file_combined.seek(0, os.SEEK_END)
-    file_combined_size = file_combined.tell()
-    if file_combined_size < cut_size:
-        raise ValueError("File is smaller than 32 bytes")
-    # Seek to where the last 32 bytes start
-    file_combined.seek(file_combined_size - cut_size)
-    # Read the last 32 bytes
-    integrity_hash = file_combined.read(cut_size)
-    # Truncate the file to remove those bytes
-    file_combined.truncate(file_combined_size - cut_size)
+    #read headers
+    file_combined = open("combined.bin", "rb")
+    integrity_hash = file_combined.read(32)
+    length = struct.unpack("I", file_combined.read(4))[0]
+    salt = file_combined.read(length)
     file_combined.close()
-
+    #cut headers
+    CUT = (0 + 32) + (4 + length)
+    with open("combined.bin", "rb") as src, open("combined_cut.bin", "wb") as dst:
+        src.seek(CUT)
+        shutil.copyfileobj(src, dst)
+    os.replace("combined_cut.bin", "combined.bin")
     #decrypt
-    crypto.decrypt("combined.bin", "combined_decrypted.bin")
+    crypto.decrypt("combined.bin", "combined_decrypted.bin", salt)
     os.replace("combined_decrypted.bin", "combined.bin")
 
     #check integrity_hash
@@ -343,9 +353,12 @@ if is_update:
                             id = content_hashes_stay.index(False)
                         except:
                             id = -1
-                        # update or upload
+                        # update/upload or upload
                         salt = None
                         if id != -1:
+                            #check if hash is empty
+                            doUpload = (content_hashes[id] == b'')
+
                             #insert new hash
                             content_hashes_stay[id] = True
                             content_hashes[id] = new_content_hashes[id_in_new]
@@ -359,9 +372,12 @@ if is_update:
                             #encrypt file
                             output_path = "temp_file.bin"
                             crypto.encrypt(current_target, output_path, salt)
-                
+
                             #update in cloud
-                            cloud.update(id + 1, current_target)
+                            if doUpload:
+                                cloud.upload(id + 1, output_path)
+                            else:
+                                cloud.update(id + 1, output_path)
 
                         else:
                             #skip deleting and copy remaining hashes

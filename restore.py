@@ -5,10 +5,12 @@ from pathlib import Path
 import importlib
 import shutil
 from Dimperpreter import Dimperpreter
+import struct
 
 base_dir = Path("./test_restore")
-#cloud = importlib.import_module("cloud_test")
-cloud = importlib.import_module("cloud_boto3")
+cloud = importlib.import_module("cloud_test")
+#cloud = importlib.import_module("cloud_boto3")
+crypto = importlib.import_module("crypto_dr57_sha256stream")
 
 #================================================================
 # hashes
@@ -26,21 +28,21 @@ def sha256_file(path, chunk_size=8192):
 # download manifest
 cloud.download(0, "combined.bin")
 
-#cut integrity hash
-cut_size = 32
-file_combined = open("combined.bin", "rb+")
-# Go to end of file
-file_combined.seek(0, os.SEEK_END)
-file_combined_size = file_combined.tell()
-if file_combined_size < cut_size:
-    raise ValueError("File is smaller than 32 bytes")
-# Seek to where the last 32 bytes start
-file_combined.seek(file_combined_size - cut_size)
-# Read the last 32 bytes
-integrity_hash = file_combined.read(cut_size)
-# Truncate the file to remove those bytes
-file_combined.truncate(file_combined_size - cut_size)
+#read headers
+file_combined = open("combined.bin", "rb")
+integrity_hash = file_combined.read(32)
+length = struct.unpack("I", file_combined.read(4))[0]
+salt = file_combined.read(length)
 file_combined.close()
+#cut headers
+CUT = (0 + 32) + (4 + length)
+with open("combined.bin", "rb") as src, open("combined_cut.bin", "wb") as dst:
+    src.seek(CUT)
+    shutil.copyfileobj(src, dst)
+os.replace("combined_cut.bin", "combined.bin")
+#decrypt
+crypto.decrypt("combined.bin", "combined_decrypted.bin", salt)
+os.replace("combined_decrypted.bin", "combined.bin")
 
 #decrypt
 #...
@@ -71,7 +73,7 @@ while True:
                 0
             case "hashes":
                 0
-                print("salts:", content_salt)
+                print("Loaded", len(content_salt), "salts.")
             case "objects":
                 print("end")
                 0
@@ -88,7 +90,7 @@ while True:
                 print("reading hashes")
             else:
                 #register hash
-                content_salt.append([args[1], None])
+                content_salt.append([bytes.fromhex(args[1]), None])
         case "objects":
             if command == "section":
                 #init
@@ -128,6 +130,10 @@ while True:
                     else:
                         #download
                         cloud.download(int(args[1]) + 1, "temp.bin")
+                        #decrypt
+                        salt = p[0]
+                        crypto.decrypt("temp.bin", "temp_decrypted.bin", p[0])
+                        os.replace("temp_decrypted.bin", "temp.bin");
                         #paste
                         shutil.copyfile("temp.bin", current_target)
                         #cache
