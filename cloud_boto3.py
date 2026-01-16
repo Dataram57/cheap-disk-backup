@@ -3,12 +3,16 @@ import shutil
 import boto3
 
 bucket_name = ""
+prefix = ""
 s3 = None
+
 
 def initialize(config):
     global bucket_name
+    global prefix
     global s3
     bucket_name = config["bucket_name"]
+    prefix = config["prefix"]
     s3 = boto3.client(
         "s3",
         endpoint_url=config["endpoint_url"],
@@ -19,20 +23,20 @@ def initialize(config):
 def upload(id, file_path):
     print("Uploading:", id, file_path)
     try:
-        s3.upload_file(Bucket=bucket_name, Key=str(id), Filename=file_path)
+        s3.upload_file(Bucket=bucket_name, Key=prefix + str(id), Filename=file_path)
         return True
     except  Exception as e:
         print(e)
         return False
 
 def update(id, file_path):
-    print("*Update:", id, file_path)
+    print("Update--V")
     return upload(id, file_path)
 
 def delete(id):
     print("Deleting:", id)
     try:
-        s3.delete_object(Bucket=bucket_name, Key=str(id))
+        s3.delete_object(Bucket=bucket_name, Key=prefix + str(id))
         return True
     except:
         print("error")
@@ -41,7 +45,7 @@ def delete(id):
 def download(id, file_path):
     print("Downloading:", id, file_path)
     try:
-        s3.download_file(Bucket=bucket_name, Key=str(id), Filename=file_path)
+        s3.download_file(Bucket=bucket_name, Key=prefix + str(id), Filename=file_path)
         return True
     except:
         print("error")
