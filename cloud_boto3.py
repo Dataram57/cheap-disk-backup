@@ -6,6 +6,8 @@ bucket_name = ""
 s3 = None
 
 def initialize(config):
+    global bucket_name
+    global s3
     bucket_name = config["bucket_name"]
     s3 = boto3.client(
         "s3",
@@ -19,12 +21,13 @@ def upload(id, file_path):
     try:
         s3.upload_file(Bucket=bucket_name, Key=str(id), Filename=file_path)
         return True
-    except:
+    except  Exception as e:
+        print(e)
         return False
 
 def update(id, file_path):
     print("*Update:", id, file_path)
-    return upload(id, path)
+    return upload(id, file_path)
 
 def delete(id):
     print("Deleting:", id)
@@ -32,6 +35,7 @@ def delete(id):
         s3.delete_object(Bucket=bucket_name, Key=str(id))
         return True
     except:
+        print("error")
         return False
 
 def download(id, file_path):
@@ -40,6 +44,7 @@ def download(id, file_path):
         s3.download_file(Bucket=bucket_name, Key=str(id), Filename=file_path)
         return True
     except:
+        print("error")
         return False
 
 

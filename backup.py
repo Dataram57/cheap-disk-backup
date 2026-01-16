@@ -365,7 +365,7 @@ if is_update:
                         salt = None
                         if id != -1:
                             #check if hash is empty
-                            doUpload = (content_hashes[id] == b'')
+                            doUpload = (len(content_hashes[id]) == 0)
 
                             #insert new hash
                             content_hashes_stay[id] = True
@@ -426,14 +426,27 @@ if is_update:
     del dimp
 
     #start deleting hashes that are not used
-    while file_hashes_next_id < len(content_hashes):
+    #find id first element that has next elements all to be deleted
+    id = len(content_hashes) - 1
+    while id >= file_hashes_next_id:
+        #check if end
+        if content_hashes_stay[id]:
+            break
+        #delete this last file (if it hasn't been already deleted)
+        if len(content_hashes[id]) != 0:
+            cloud.delete(id + 1)
+        #next
+        id -= 1
+    #save elment till id of non empty element is
+    while file_hashes_next_id <= id:
         args = dimp_hashes.Next()
         if content_hashes_stay[file_hashes_next_id]:
             #save used hash
             file_hashes.write(DimSanitize(args[0].strip()) + "," + DimSanitize(args[1].strip()) + ";\n")
         else:
-            #delete in the cloud
-            cloud.delete(file_hashes_next_id + 1)
+            #delete in the cloud (if hasn't been already deleted)
+            if len(content_hashes[file_hashes_next_id]) != 0:
+                cloud.delete(file_hashes_next_id + 1)
             #save empty hash
             file_hashes.write(",;\n")
         #next id
