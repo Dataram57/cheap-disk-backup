@@ -6,12 +6,20 @@ import importlib
 import shutil
 from Dimperpreter import Dimperpreter
 import struct
+import json
 
-BUFFER_SIZE = 1024 * 1024
+BUFFER_SIZE = 8192
 
-cloud = importlib.import_module("cloud_test")
-#cloud = importlib.import_module("cloud_boto3")
-crypto = importlib.import_module("crypto_dr57_sha256stream")
+#================================================================
+# Load config and modules
+
+with open("backup.config.json", "r") as f:
+    config = json.load(f)
+
+crypto = importlib.import_module(config["crypto"]["module"])
+crypto.initialize(config["crypto"]["config"])
+cloud = importlib.import_module(config["cloud"]["module"])
+cloud.initialize(config["cloud"]["config"])
 
 #================================================================
 # Manifest
@@ -259,7 +267,7 @@ if is_update:
     # Update
 
     # Generate objects.dim
-    ScanObjects("./test_source", "objects_new.dim")
+    ScanObjects(config["targetSourceDirectory"], "objects_new.dim")
 
     #objects.dim
     file_objects = open("objects.dim", "w", encoding="utf-8")
@@ -305,7 +313,7 @@ if is_update:
     file_objects_new = open("objects_new.dim", "r", encoding="utf-8")
     dimp = Dimperpreter(file_objects_new)
     section = ""
-    current_dir = "./test_source"
+    current_dir = config["targetSourceDirectory"]
     current_target = current_dir
     while True:
         #read args
@@ -446,7 +454,7 @@ else:
     file_hashes.write("section,hashes;\n")
 
     # Generate objects.dim
-    ScanObjects("./test_source", "objects.dim")
+    ScanObjects(config["targetSourceDirectory"], "objects.dim")
 
     # close hashes
     file_hashes.close()

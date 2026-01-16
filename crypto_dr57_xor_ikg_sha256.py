@@ -197,10 +197,10 @@ def _XOREncryptDecrypt(input_file, output_file):
 #
 #----------------------------------------------------------------
 
-mainKey = bytearray(bytes.fromhex("2526"))
+mainKey = bytearray(bytes.fromhex("00"))
 
 def initialize(config):
-    0
+    mainKey = bytearray(bytes(config["password"], "ascii"))
 
 def end():
     #shred generator

@@ -1,7 +1,7 @@
 import os
 import shutil
 
-def initialize():
+def initialize(config):
     0
 
 def upload(id, file_path):

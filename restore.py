@@ -6,11 +6,18 @@ import importlib
 import shutil
 from Dimperpreter import Dimperpreter
 import struct
+import json
 
-base_dir = Path("./test_restore")
-cloud = importlib.import_module("cloud_test")
-#cloud = importlib.import_module("cloud_boto3")
-crypto = importlib.import_module("crypto_dr57_sha256stream")
+#================================================================
+# Load config and modules
+
+with open("backup.config.json", "r") as f:
+    config = json.load(f)
+
+crypto = importlib.import_module(config["crypto"]["module"])
+crypto.initialize(config["crypto"]["config"])
+cloud = importlib.import_module(config["cloud"]["module"])
+cloud.initialize(config["cloud"]["config"])
 
 #================================================================
 # hashes
@@ -57,7 +64,7 @@ file_combined = open("combined.bin", "r", encoding="utf-8")
 dimp = Dimperpreter(file_combined)
 section = None
 content_salt = []       #(salt, CachedFile)
-current_dir = base_dir
+current_dir = config["targetRestoreDirectory"]
 current_target = current_dir
 while True:
     #read args
