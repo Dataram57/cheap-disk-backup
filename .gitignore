@@ -2,7 +2,9 @@
 **.bin
 **.pyc
 **.config.json
+**.bkp
 
 test_source/**
+test_source_link
 test_cloud/**
 test_restore/**

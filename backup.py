@@ -217,8 +217,7 @@ def PackManifest():
 
 
 #================================================================
-# Main
-
+# Differential backup
 
 # check if update
 if cloud.download(0, FILENAME_COMBINED_FINAL):
@@ -279,6 +278,9 @@ if cloud.download(0, FILENAME_COMBINED_FINAL):
         print("Loaded " + str(len(content_hashes)) + " content hashes.")
         #mark update flag
         is_update = True
+
+#================================================================
+# Main
 
 if is_update:
     # Update
