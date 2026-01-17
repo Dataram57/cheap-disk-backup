@@ -1,3 +1,4 @@
+from shared import *
 import os
 import stat
 import hashlib
@@ -9,7 +10,6 @@ import struct
 import json
 
 BUFFER_SIZE = 8192
-SALT_LENGTH = 1024
 
 #================================================================
 # Load config and modules
@@ -21,6 +21,13 @@ crypto = importlib.import_module(config["crypto"]["module"])
 crypto.initialize(config["crypto"]["config"])
 cloud = importlib.import_module(config["cloud"]["module"])
 cloud.initialize(config["cloud"]["config"])
+
+def EncryptFile(file_path, output_path, salt):
+    #encrypt
+    crypto.encrypt(file_path, output_path, salt)
+    #add salt
+    with open(output_path, "ab") as f:
+         f.write(salt)
 
 #================================================================
 # Manifest
@@ -71,7 +78,7 @@ def RegisterContent(file_path):
             salt = crypto.generate_salt(SALT_LENGTH)
             #encrypt file
             output_path = "temp_file.bin"
-            crypto.encrypt(file_path, output_path, salt)
+            EncryptFile(file_path, output_path, salt)
             #upload new content (id=0 reserved for the manifest)
             id = len(content_hashes)
             cloud.upload(id + 1, output_path)
@@ -380,8 +387,8 @@ if is_update:
                             salt = crypto.generate_salt(SALT_LENGTH)
                             #encrypt file
                             output_path = "temp_file.bin"
-                            crypto.encrypt(current_target, output_path, salt)
-
+                            EncryptFile(current_target, output_path, salt)
+                            
                             #update in cloud
                             if doUpload:
                                 cloud.upload(id + 1, output_path)
@@ -404,7 +411,7 @@ if is_update:
                             salt = crypto.generate_salt(SALT_LENGTH)
                             #encrypt file
                             output_path = "temp_file.bin"
-                            crypto.encrypt(current_target, output_path, salt)
+                            EncryptFile(current_target, output_path, salt)
 
                             #upload new file into the cloud
                             cloud.upload(id + 1, output_path)

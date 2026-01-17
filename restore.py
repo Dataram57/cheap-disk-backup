@@ -1,3 +1,4 @@
+from shared import *
 import os
 import stat
 import hashlib
@@ -21,6 +22,19 @@ crypto = importlib.import_module(config["crypto"]["module"])
 crypto.initialize(config["crypto"]["config"])
 cloud = importlib.import_module(config["cloud"]["module"])
 cloud.initialize(config["cloud"]["config"])
+
+def DecryptFile(file_path, output_path):
+    with open(file_path, "r+b") as f:
+        f.seek(0, 2)              # move to end
+        file_size = f.tell()
+
+        read_size = min(SALT_LENGTH, file_size)
+        f.seek(file_size - read_size)
+
+        salt = f.read(read_size) # read last bytes
+        f.truncate(file_size - read_size)
+    #decrypt
+    crypto.decrypt(file_path, output_path, salt)
 
 #================================================================
 # hashes
@@ -143,8 +157,9 @@ while True:
                         cloud.download(int(args[1]) + 1, "temp.bin")
                         #decrypt
                         salt = p[0]
-                        crypto.decrypt("temp.bin", "temp_decrypted.bin", p[0])
-                        os.replace("temp_decrypted.bin", "temp.bin");
+                        #crypto.decrypt("temp.bin", "temp_decrypted.bin", p[0])
+                        DecryptFile("temp.bin", "temp_decrypted.bin")
+                        os.replace("temp_decrypted.bin", "temp.bin")
                         #paste
                         shutil.copyfile("temp.bin", current_target)
                         #cache
