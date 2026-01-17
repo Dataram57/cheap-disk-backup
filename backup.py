@@ -10,6 +10,15 @@ import struct
 import json
 
 BUFFER_SIZE = 8192
+#default
+FILENAME_TEMP = "temp_file.bin"
+FILENAME_OBJECTS = "objects.dim"
+FILENAME_HASHES = "hashes.dim"
+FILENAME_COMBINED = "combined.dim"
+FILENAME_COMBINED_ENCRYPTED = "combined.enc.bin"
+FILENAME_COMBINED_FINAL = "combined.bin"
+#Update
+FILENAME_OBJECTS_TO_CORRECT = "objects_new.dim"
 
 #================================================================
 # Load config and modules
@@ -77,7 +86,7 @@ def RegisterContent(file_path):
             #get salt
             salt = crypto.generate_salt(SALT_LENGTH)
             #encrypt file
-            output_path = "temp_file.bin"
+            output_path = FILENAME_TEMP
             EncryptFile(file_path, output_path, salt)
             #upload new content (id=0 reserved for the manifest)
             id = len(content_hashes)
@@ -183,23 +192,23 @@ def join_files(file1, file2, output):
                 out.write(f.read())
 
 def PackManifest():
-    join_files("hashes.dim", "objects.dim", "combined.dim")
+    join_files(FILENAME_HASHES, FILENAME_OBJECTS, FILENAME_COMBINED)
 
     # get integrity hash
-    integrity_hash = sha256_file("combined.dim")
+    integrity_hash = sha256_file(FILENAME_COMBINED)
 
     # encrypt combine
     salt = crypto.generate_salt(SALT_LENGTH)
-    crypto.encrypt("combined.dim", "combined.enc.bin", salt)
+    crypto.encrypt(FILENAME_COMBINED, FILENAME_COMBINED_ENCRYPTED, salt)
 
     # write file
-    with open("combined.bin", "wb") as out_file:
+    with open(FILENAME_COMBINED_FINAL, "wb") as out_file:
         #write hash + salt
         out_file.write(integrity_hash)
         out_file.write(struct.pack("I", len(salt)))
         out_file.write(salt)
         #write encrypted combined.dim
-        with open("combined.enc.bin", "rb") as in_file:
+        with open(FILENAME_COMBINED_ENCRYPTED, "rb") as in_file:
             while True:
                 chunk = in_file.read(BUFFER_SIZE)
                 if not chunk:
@@ -212,30 +221,30 @@ def PackManifest():
 
 
 # check if update
-if cloud.download(0, "combined.bin"):
+if cloud.download(0, FILENAME_COMBINED_FINAL):
     #read headers
-    file_combined = open("combined.bin", "rb")
+    file_combined = open(FILENAME_COMBINED_FINAL, "rb")
     integrity_hash = file_combined.read(32)
     length = struct.unpack("I", file_combined.read(4))[0]
     salt = file_combined.read(length)
     file_combined.close()
     #cut headers
     CUT = (0 + 32) + (4 + length)
-    with open("combined.bin", "rb") as src, open("combined_cut.bin", "wb") as dst:
+    with open(FILENAME_COMBINED_FINAL, "rb") as src, open(FILENAME_COMBINED_ENCRYPTED, "wb") as dst:
         src.seek(CUT)
         shutil.copyfileobj(src, dst)
-    os.replace("combined_cut.bin", "combined.bin")
+    #os.replace(FILENAME_COMBINED_ENCRYPTED, FILENAME_COMBINED_FINAL)
     #decrypt
-    crypto.decrypt("combined.bin", "combined_decrypted.bin", salt)
-    os.replace("combined_decrypted.bin", "combined.bin")
+    crypto.decrypt(FILENAME_COMBINED_ENCRYPTED, FILENAME_COMBINED, salt)
+    #os.replace("combined_decrypted.bin", FILENAME_COMBINED_FINAL)
 
     #check integrity_hash
-    if sha256_file("combined.bin") != integrity_hash:
+    if sha256_file(FILENAME_COMBINED) != integrity_hash:
         #perform
         print("hashes don't match")
     else:
         #load hashes
-        file_combined = open("combined.bin", "r", encoding="utf-8")
+        file_combined = open(FILENAME_COMBINED, "r", encoding="utf-8")
         dimp = Dimperpreter(file_combined)
         section = ""
         while True:
@@ -275,10 +284,10 @@ if is_update:
     # Update
 
     # Generate objects.dim
-    ScanObjects(config["targetSourceDirectory"], "objects_new.dim")
+    ScanObjects(config["targetSourceDirectory"], FILENAME_OBJECTS_TO_CORRECT)
 
     #objects.dim
-    file_objects = open("objects.dim", "w", encoding="utf-8")
+    file_objects = open(FILENAME_OBJECTS, "w", encoding="utf-8")
     def WriteObject(args):
         for i, arg in enumerate(args):
             file_objects.write(DimSanitize(arg))
@@ -288,11 +297,11 @@ if is_update:
     
     #hashes.dim
     upload_id_gen = len(content_hashes)
-    file_hashes = open("hashes.dim", "w")
+    file_hashes = open(FILENAME_HASHES, "w")
     file_hashes.write("section,information;\n")
     file_hashes.write("title," + DimSanitize("Example Title") + ";\n")
     file_hashes.write("section,hashes;\n")
-    file_combined = open("combined.bin", "r", encoding="utf-8")
+    file_combined = open(FILENAME_COMBINED, "r", encoding="utf-8")
     dimp_hashes = Dimperpreter(file_combined)
     #scope to hashes
     while True:
@@ -318,7 +327,7 @@ if is_update:
         file_hashes_next_id += 1
 
     #scan objects_new.dim
-    file_objects_new = open("objects_new.dim", "r", encoding="utf-8")
+    file_objects_new = open(FILENAME_OBJECTS_TO_CORRECT, "r", encoding="utf-8")
     dimp = Dimperpreter(file_objects_new)
     section = ""
     current_dir = config["targetSourceDirectory"]
@@ -386,7 +395,7 @@ if is_update:
                             #get salt
                             salt = crypto.generate_salt(SALT_LENGTH)
                             #encrypt file
-                            output_path = "temp_file.bin"
+                            output_path = FILENAME_TEMP
                             EncryptFile(current_target, output_path, salt)
                             
                             #update in cloud
@@ -410,7 +419,7 @@ if is_update:
                             #get salt
                             salt = crypto.generate_salt(SALT_LENGTH)
                             #encrypt file
-                            output_path = "temp_file.bin"
+                            output_path = FILENAME_TEMP
                             EncryptFile(current_target, output_path, salt)
 
                             #upload new file into the cloud
@@ -469,17 +478,17 @@ else:
     # First Upload:
     
     # init file hashes
-    file_hashes = open("hashes.dim", "w")
+    file_hashes = open(FILENAME_HASHES, "w")
     file_hashes.write("section,information;\n")
     file_hashes.write("title," + DimSanitize("Example Title") + ";\n")
     file_hashes.write("section,hashes;\n")
 
     # Generate objects.dim
-    ScanObjects(config["targetSourceDirectory"], "objects.dim")
+    ScanObjects(config["targetSourceDirectory"], FILENAME_OBJECTS)
 
     # close hashes
     file_hashes.close()
 
 # Finishing
 PackManifest()
-cloud.upload(0, "combined.bin")
+cloud.upload(0, FILENAME_COMBINED_FINAL)
