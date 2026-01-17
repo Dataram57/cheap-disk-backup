@@ -23,7 +23,7 @@ crypto.initialize(config["crypto"]["config"])
 cloud = importlib.import_module(config["cloud"]["module"])
 cloud.initialize(config["cloud"]["config"])
 
-def DecryptFile(file_path, output_path):
+def DecryptFile(file_path, output_path, expectedHash):
     with open(file_path, "r+b") as f:
         f.seek(0, 2)              # move to end
         file_size = f.tell()
@@ -33,6 +33,9 @@ def DecryptFile(file_path, output_path):
 
         salt = f.read(read_size) # read last bytes
         f.truncate(file_size - read_size)
+    #check hash
+    if expectedHash != salt:
+        print("REPLAY ATTACK on MANIFEST or CONTENT has been detected!!!")
     #decrypt
     crypto.decrypt(file_path, output_path, salt)
 
@@ -155,10 +158,8 @@ while True:
                     else:
                         #download
                         cloud.download(int(args[1]) + 1, "temp.bin")
-                        #decrypt
-                        salt = p[0]
                         #crypto.decrypt("temp.bin", "temp_decrypted.bin", p[0])
-                        DecryptFile("temp.bin", "temp_decrypted.bin")
+                        DecryptFile("temp.bin", "temp_decrypted.bin", p[0])
                         os.replace("temp_decrypted.bin", "temp.bin")
                         #paste
                         shutil.copyfile("temp.bin", current_target)
