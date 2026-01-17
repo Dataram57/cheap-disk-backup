@@ -9,6 +9,7 @@ import struct
 import json
 
 BUFFER_SIZE = 8192
+SALT_LENGTH = 1024
 
 #================================================================
 # Load config and modules
@@ -67,7 +68,7 @@ def RegisterContent(file_path):
             return content_hashes.index(hash_bytes)
         except ValueError:
             #get salt
-            salt = crypto.generate_salt()
+            salt = crypto.generate_salt(SALT_LENGTH)
             #encrypt file
             output_path = "temp_file.bin"
             crypto.encrypt(file_path, output_path, salt)
@@ -181,7 +182,7 @@ def PackManifest():
     integrity_hash = sha256_file("combined.dim")
 
     # encrypt combine
-    salt = crypto.generate_salt()
+    salt = crypto.generate_salt(SALT_LENGTH)
     crypto.encrypt("combined.dim", "combined.enc.bin", salt)
 
     # write file
@@ -376,7 +377,7 @@ if is_update:
 
                             #generate new entry
                             #get salt
-                            salt = crypto.generate_salt()
+                            salt = crypto.generate_salt(SALT_LENGTH)
                             #encrypt file
                             output_path = "temp_file.bin"
                             crypto.encrypt(current_target, output_path, salt)
@@ -400,7 +401,7 @@ if is_update:
 
                             #generate new entry
                             #get salt
-                            salt = crypto.generate_salt()
+                            salt = crypto.generate_salt(SALT_LENGTH)
                             #encrypt file
                             output_path = "temp_file.bin"
                             crypto.encrypt(current_target, output_path, salt)

@@ -8,10 +8,13 @@ from Dimperpreter import Dimperpreter
 import struct
 import json
 
+BUFFER_SIZE = 8192
+SALT_LENGTH = 1024
+
 #================================================================
 # Load config and modules
 
-with open("backup.config.json", "r") as f:
+with open("restore.config.json", "r") as f:
     config = json.load(f)
 
 crypto = importlib.import_module(config["crypto"]["module"])
@@ -42,6 +45,7 @@ length = struct.unpack("I", file_combined.read(4))[0]
 salt = file_combined.read(length)
 file_combined.close()
 #cut headers
+print(length)
 CUT = (0 + 32) + (4 + length)
 with open("combined.bin", "rb") as src, open("combined_cut.bin", "wb") as dst:
     src.seek(CUT)

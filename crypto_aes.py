@@ -3,11 +3,8 @@ import hashlib
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 
-# Global key material
+BLOCK_SIZE = 16
 _main_key = None
-
-BLOCK_SIZE = 16  # AES block size
-
 
 def initialize(config):
     global _main_key
@@ -29,13 +26,13 @@ def _derive_key(password, salt, iterations=200_000):
         password,
         salt,
         iterations,
-        dklen=32  # AES-256
+        dklen=32
     )
 
 
 def _pad(data):
     pad_len = BLOCK_SIZE - (len(data) % BLOCK_SIZE)
-    return data + bytes([pad_len] * pad_len)
+    return data + bytes([pad_len]) * pad_len
 
 
 def _unpad(data):
@@ -48,10 +45,12 @@ def encrypt(file_path, output_path, salt=None):
         raise ValueError("Encryption system not initialized")
 
     if salt is None:
-        salt = generate_salt()
+        salt = b""
+    elif len(salt) > 255:
+        salt = salt[:255]
 
     key = _derive_key(_main_key, salt)
-    iv = get_random_bytes(BLOCK_SIZE)
+    iv = os.urandom(BLOCK_SIZE)
 
     cipher = AES.new(key, AES.MODE_CBC, iv)
 
@@ -60,9 +59,12 @@ def encrypt(file_path, output_path, salt=None):
 
     ciphertext = cipher.encrypt(_pad(plaintext))
 
-    # File format: [salt][iv][ciphertext]
+    # New format: [salt_len][salt][iv][ciphertext]
     with open(output_path, "wb") as f:
-        f.write(salt + iv + ciphertext)
+        f.write(bytes([len(salt)]))
+        f.write(salt)
+        f.write(iv)
+        f.write(ciphertext)
 
 
 def decrypt(file_path, output_path, salt=None):
@@ -72,11 +74,39 @@ def decrypt(file_path, output_path, salt=None):
     with open(file_path, "rb") as f:
         data = f.read()
 
-    if salt is None:
-        salt = data[:16]
+    if len(data) < BLOCK_SIZE:
+        raise ValueError("Invalid encrypted file")
 
-    iv = data[16:32]
-    ciphertext = data[32:]
+    # Try new format first
+    try:
+        salt_len = data[0]
+        header_len = 1 + salt_len + BLOCK_SIZE
+
+        if header_len > len(data):
+            raise ValueError
+
+        ciphertext = data[header_len:]
+        if len(ciphertext) % BLOCK_SIZE != 0:
+            raise ValueError
+
+        file_salt = data[1:1 + salt_len]
+        iv = data[1 + salt_len:header_len]
+
+        if salt is None:
+            salt = file_salt
+        else:
+            if len(salt) < salt_len:
+                raise ValueError("Provided salt too short")
+            salt = salt[:salt_len]
+
+    except ValueError:
+        # Legacy format: [iv][ciphertext]
+        salt = b""
+        iv = data[:BLOCK_SIZE]
+        ciphertext = data[BLOCK_SIZE:]
+
+        if len(ciphertext) % BLOCK_SIZE != 0:
+            raise ValueError("Invalid encrypted file")
 
     key = _derive_key(_main_key, salt)
     cipher = AES.new(key, AES.MODE_CBC, iv)
