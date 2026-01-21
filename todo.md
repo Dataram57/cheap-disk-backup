@@ -18,7 +18,7 @@
     - `new_content_hashes` must be saved
     - *`new_content_hashes_mapper` has everywhere `-1`*
     * **TODO**:
-        - `new_content_hashes` should be saved at `FILENAME_HASHES_NEW`
+        - `new_content_hashes` should be saved at `FILENAME_HASHES_NEW`, or can be recalculated back again.
     * Checkpoint:
         - `current_target` can be loaded through `FILENAME_OBJECTS_TO_CORRECT`
         - `new_content_hashes` can be loaded through `FILENAME_HASHES_NEW`   

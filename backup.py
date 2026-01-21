@@ -20,6 +20,9 @@ FILENAME_COMBINED_FINAL = "combined.bin"
 #Update
 FILENAME_OBJECTS_TO_CORRECT = "objects_new.dim"
 
+#LoadObjects
+FILENAME_HASHES_NEW = "new_hashes.dim"
+
 #================================================================
 # Load config and modules
 
@@ -52,6 +55,8 @@ content_hashes_stay = []    #store only Booleans to mark if cloud stored content
 is_update = False
 new_content_hashes = []     #store only hashees (salt is applied during the replace process)
 new_content_hashes_mapper = []  #stores only new indexes
+file_new_content_hashes = None
+
 
 def sha256_file(path, chunk_size=8192):
     sha256 = hashlib.sha256()
@@ -75,9 +80,12 @@ def RegisterContent(file_path):
                 # try to find it in the new_content_hashes
                 return -(new_content_hashes.index(hash_bytes) + 1)
             except ValueError:
-                # new hash found
+                #new hash found
                 new_content_hashes.append(hash_bytes)
                 new_content_hashes_mapper.append(-1)
+                #save hash
+                file_new_content_hashes.write(DimSanitize(hash_bytes.hex()) + ";\n")
+                #return id
                 return -len(new_content_hashes)
     else:
         try:
@@ -115,11 +123,60 @@ def cd_up(path_a, path_b):
     return len(a_parts) - common_length
 
 def ScanObjects(start_path, output_path):
+    #check if there is a previous state to be loaded
+    expectedDir = None
+    expectedTarget = None
+    if Path(output_path).is_file():
+        #get last checked path
+        with open(output_path, "r") as f:
+            dimp = Dimperpreter(f)
+            expectedDir = start_path
+            expectedTarget = ""
+            while True:
+                args = dimp.Next()
+                if not args:
+                    break
+                match args[0].strip():
+                    case "content":
+                        content_hashes_stay[int(args[1])] = True
+                    case "in":
+                        expectedDir = os.path.join(expectedDir, args[1])
+                        expectedTarget = expectedDir
+                    case "out":
+                        i = int(args[1])
+                        while i > 0:
+                            i -= 1
+                            expectedDir = Path(expectedDir).parent
+                        expectedTarget = expectedDir
+                    case "object":
+                        expectedTarget = os.path.join(expectedDir, args[1])
+            #end
+            print("ScanObjects:", "Previous state at", expectedTarget)
+            del dimp
+            f.close()
+        #load new content hashes
+        with open(FILENAME_HASHES_NEW, "r") as f:
+            dimp = Dimperpreter(f)
+            while True:
+                args = dimp.Next()
+                if not args:
+                    break
+                if len(args[0]) > 0:
+                    new_content_hashes.append(bytes.fromhex(args[0]))
+                    new_content_hashes_mapper.append(-1)
+            #end
+            del dimp
+            f.close()
+
     #file
-    file_objects = open(output_path, "w")
+    file_objects = open(output_path, "a")
 
     #funcs
     def WriteObject(*args):
+        #skip
+        if expectedTarget != None:
+            return
+        #write
         for i, arg in enumerate(args):
             file_objects.write(DimSanitize(arg))
             if i < len(args) - 1:
@@ -131,7 +188,6 @@ def ScanObjects(start_path, output_path):
     count = 0
     last_root=start_path
     for root, dirs, files in os.walk(start_path, onerror=lambda e: None, followlinks=False):
-
         #check what kind of step
         if last_root != root:
             r = cd_up(last_root, root)
@@ -140,13 +196,27 @@ def ScanObjects(start_path, output_path):
             WriteObject("in", os.path.basename(root))
             last_root = root
 
-        #register dir info
-        st = os.lstat(root)
-        WriteObject("stat", st.st_dev, st.st_ino, st.st_mode, st.st_uid, st.st_gid, st.st_nlink, st.st_size, st.st_mtime_ns)
+            #register dir info
+            st = os.lstat(root)
+            WriteObject("stat", st.st_dev, st.st_ino, st.st_mode, st.st_uid, st.st_gid, st.st_nlink, st.st_size, st.st_mtime_ns)
 
         #study files
         for name in files + dirs:
+            #get path
             path = os.path.join(root, name)
+            
+            if expectedTarget != None:
+                print("=:", path)
+            else:
+                print("+:", path)
+
+            #check if reached proper target
+            if expectedTarget != None:
+                if expectedTarget == path:
+                    expectedTarget = None
+                continue
+
+            #rest
             try:
                 #skip next roots (dirs)
                 st = os.lstat(path)
@@ -182,8 +252,10 @@ def ScanObjects(start_path, output_path):
             except (PermissionError, FileNotFoundError):
                 pass
 
+            #TODO: BREAK HERE
+
 #================================================================
-# Packing
+# Manifest
 
 def join_files(file1, file2, output):
     with open(output, "wb") as out:
@@ -215,12 +287,22 @@ def PackManifest():
                     break
                 out_file.write(chunk)
 
+def CreateEmptyManifest():
+    f = open(FILENAME_HASHES, "w")
+    f.write("section,hashes;\n")
+    f.close()
+    f = open(FILENAME_OBJECTS, "w")
+    f.write("section,hashes;\n")
+    f.close()
+    PackManifest()
+    os.remove(FILENAME_HASHES)
+    os.remove(FILENAME_OBJECTS)
 
 #================================================================
 # Differential backup
 
-# check if update
-if cloud.download(0, FILENAME_COMBINED_FINAL):
+#loads already existing hashes
+def LoadArrays():
     #read headers
     file_combined = open(FILENAME_COMBINED_FINAL, "rb")
     integrity_hash = file_combined.read(32)
@@ -276,18 +358,64 @@ if cloud.download(0, FILENAME_COMBINED_FINAL):
         del dimp
         #all hashes are now loaded
         print("Loaded " + str(len(content_hashes)) + " content hashes.")
-        #mark update flag
-        is_update = True
+    #read headers
+    file_combined = open(FILENAME_COMBINED_FINAL, "rb")
+    integrity_hash = file_combined.read(32)
+    length = struct.unpack("I", file_combined.read(4))[0]
+    salt = file_combined.read(length)
+    file_combined.close()
+    #cut headers
+    CUT = (0 + 32) + (4 + length)
+    with open(FILENAME_COMBINED_FINAL, "rb") as src, open(FILENAME_COMBINED_ENCRYPTED, "wb") as dst:
+        src.seek(CUT)
+        shutil.copyfileobj(src, dst)
+    #os.replace(FILENAME_COMBINED_ENCRYPTED, FILENAME_COMBINED_FINAL)
+    #decrypt
+    crypto.decrypt(FILENAME_COMBINED_ENCRYPTED, FILENAME_COMBINED, salt)
+    #os.replace("combined_decrypted.bin", FILENAME_COMBINED_FINAL)
 
-#================================================================
-# Main
+    #check integrity_hash
+    if sha256_file(FILENAME_COMBINED) != integrity_hash:
+        #perform
+        print("hashes don't match")
+    else:
+        #load hashes
+        file_combined = open(FILENAME_COMBINED, "r", encoding="utf-8")
+        dimp = Dimperpreter(file_combined)
+        section = ""
+        while True:
+            #read args
+            args = dimp.Next()
+            if not args:
+                break
+            command = args[0].strip()
 
-if is_update:
-    # Update
+            #check end of current section
+            if command == "section":
+                match section:
+                    case "hashes":
+                        break
+                #update section
+                section = args[1].strip()
 
-    # Generate objects.dim
-    ScanObjects(config["targetSourceDirectory"], FILENAME_OBJECTS_TO_CORRECT)
+            #states
+            match section:
+                case "hashes":
+                    if command == "section":
+                        #init
+                        print("Reading hashes")
+                    else:
+                        #register hash
+                        content_hashes.append(bytes.fromhex(args[0]))
+                        content_hashes_stay.append(False)
+        #close dimp
+        file_combined.close()
+        del dimp
+        #all hashes are now loaded
+        print("Loaded " + str(len(content_hashes)) + " content hashes.")
 
+
+def OptimizeContent():
     #objects.dim
     file_objects = open(FILENAME_OBJECTS, "w", encoding="utf-8")
     def WriteObject(args):
@@ -316,6 +444,9 @@ if is_update:
                 break
     #function for writing
     file_hashes_next_id = 0
+
+
+
     def WriteNextHashes(count):
         global file_hashes_next_id
         while count > 0:
@@ -476,21 +607,24 @@ if is_update:
     file_combined.close()
     del dimp_hashes
 
-else:
-    # First Upload:
-    
-    # init file hashes
-    file_hashes = open(FILENAME_HASHES, "w")
-    file_hashes.write("section,information;\n")
-    file_hashes.write("title," + DimSanitize("Example Title") + ";\n")
-    file_hashes.write("section,hashes;\n")
+#================================================================
+# Main
 
-    # Generate objects.dim
-    ScanObjects(config["targetSourceDirectory"], FILENAME_OBJECTS)
+is_update = True
 
-    # close hashes
-    file_hashes.close()
+#check if empty manifest has to be made.
+if not Path(FILENAME_COMBINED_FINAL).is_file():
+    if not cloud.download(0, FILENAME_COMBINED_FINAL):
+        CreateEmptyManifest()
+#load existing hashes
+LoadArrays()
+#Generate new hashes and load objects (failure may occur here)
+file_new_content_hashes = open(FILENAME_HASHES_NEW, "a")
+ScanObjects(config["targetSourceDirectory"], FILENAME_OBJECTS_TO_CORRECT)
+file_new_content_hashes.close()
+#Optimize content
+#OptimizeContent()
 
 # Finishing
-PackManifest()
-cloud.upload(0, FILENAME_COMBINED_FINAL)
+#PackManifest()
+#cloud.upload(0, FILENAME_COMBINED_FINAL)
