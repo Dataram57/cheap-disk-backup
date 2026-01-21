@@ -1,5 +1,25 @@
-rm combined.bin
-rm combined.dim
-rm combined.enc.bin
-rm new_hashes.dim
-rm objects_new.dim
+FILENAME_TEMP="temp_file.bin"
+FILENAME_OBJECTS="objects.dim"
+FILENAME_HASHES="hashes.dim"
+FILENAME_COMBINED="combined.dim"
+FILENAME_COMBINED_ENCRYPTED="combined.enc.bin"
+FILENAME_COMBINED_FINAL="combined.bin"
+#Update
+FILENAME_OBJECTS_TO_CORRECT="objects_new.dim"
+
+#ScanObjects
+FILENAME_HASHES_NEW="new_hashes.dim"
+
+#OptimizeObjects
+FILENAME_HASHES_NEW_MAP="new_content_hashes_mapper.dim"
+
+
+rm "$FILENAME_TEMP"
+rm "$FILENAME_OBJECTS"
+rm "$FILENAME_HASHES"
+rm "$FILENAME_COMBINED"
+rm "$FILENAME_COMBINED_ENCRYPTED"
+rm "$FILENAME_COMBINED_FINAL"
+rm "$FILENAME_OBJECTS_TO_CORRECT"
+rm "$FILENAME_HASHES_NEW"
+rm "$FILENAME_HASHES_NEW_MAP"

@@ -21,8 +21,11 @@ FILENAME_COMBINED_FINAL = "combined.bin"
 #Update
 FILENAME_OBJECTS_TO_CORRECT = "objects_new.dim"
 
-#LoadObjects
+#ScanObjects
 FILENAME_HASHES_NEW = "new_hashes.dim"
+
+#OptimizeObjects
+FILENAME_HASHES_NEW_MAP = "new_content_hashes_mapper.dim"
 
 #================================================================
 # Killing
@@ -149,7 +152,7 @@ def ScanObjects(start_path, output_path):
         with open(output_path, "r") as f:
             dimp = Dimperpreter(f)
             expectedDir = start_path
-            expectedTarget = ""
+            expectedTarget = expectedDir
             while True:
                 args = dimp.Next()
                 if not args:
@@ -433,10 +436,91 @@ def LoadArrays():
         #all hashes are now loaded
         print("Loaded " + str(len(content_hashes)) + " content hashes.")
 
+# Scans
+#- FILENAME_COMBINED - to retrieve details about the old content
+#- FILENAME_OBJECTS_TO_CORRECT - as a reference object hierarchy
+#Produces:
+#- FILENAME_HASHES - new list of hashes
+#- FILENAME_OBJECTS - adjusted object hierarchy
+def OptimizeContent(start_path):
+    #current content id
+    file_hashes_next_id = 0
+    upload_id_gen = len(content_hashes)
 
-def OptimizeContent():
+    #check if there is a previous state to be loaded
+    expectedDir = None
+    expectedTarget = None
+    expectedCombo = 0
+    if Path(FILENAME_OBJECTS).is_file():
+        #get last checked path
+        with open(FILENAME_OBJECTS, "r") as f:
+            dimp = Dimperpreter(f)
+            expectedDir = start_path
+            expectedTarget = expectedDir
+            while True:
+                args = dimp.Next()
+                if not args:
+                    break
+                match args[0].strip():
+                    case "in":
+                        expectedDir = os.path.join(expectedDir, args[1])
+                        expectedTarget = expectedDir
+                        expectedCombo = 0
+                    case "out":
+                        i = int(args[1])
+                        while i > 0:
+                            i -= 1
+                            expectedDir = Path(expectedDir).parent
+                        expectedTarget = expectedDir
+                        expectedCombo = 0
+                    case "object":
+                        expectedTarget = os.path.join(expectedDir, args[1])
+                        expectedCombo = 0
+                #count combo
+                expectedCombo += 1
+            #end
+            print("OptimizeContent:", "Previous state at", expectedTarget)
+            del dimp
+            f.close()
+        #get last count of written hashes
+        with open(FILENAME_HASHES, "r") as f:
+            dimp = Dimperpreter(f)
+            #scope to proper section
+            while True:
+                args = dimp.Next()
+                if args[0].strip() == "section":
+                    if args[1].strip() == "hashes":
+                        break
+            #read hashes
+            while True:
+                args = dimp.Next()
+                if not args:
+                    break
+                if len(args[0].strip()) > 0:
+                    if file_hashes_next_id < len(content_hashes_stay):
+                        content_hashes_stay[file_hashes_next_id] = True
+                        file_hashes_next_id += 1
+                    else:
+                        #now uploading will most likely occur
+                        upload_id_gen += 1
+            del dimp
+            f.close()
+        #get last saved new_content_hashes_mapper
+        with open(FILENAME_HASHES_NEW_MAP, "r") as f:
+            i = 0
+            dimp = Dimperpreter(f)
+            while True:
+                args = dimp.Next()
+                if not args:
+                    break
+                if len(args[0].strip()) > 0:
+                    new_content_hashes_mapper[i] = int(args[0].strip())
+                    i += 1
+            del dimp
+            f.close()
+
     #objects.dim
-    file_objects = open(FILENAME_OBJECTS, "w", encoding="utf-8")
+    file_objects = open(FILENAME_OBJECTS, "a", encoding="utf-8")
     def WriteObject(args):
         for i, arg in enumerate(args):
             file_objects.write(DimSanitize(arg))
@@ -445,11 +529,14 @@ def OptimizeContent():
         file_objects.write(";")
     
     #hashes.dim
-    upload_id_gen = len(content_hashes)
-    file_hashes = open(FILENAME_HASHES, "w")
-    file_hashes.write("section,information;\n")
-    file_hashes.write("title," + DimSanitize("Example Title") + ";\n")
-    file_hashes.write("section,hashes;\n")
+    file_hashes = open(FILENAME_HASHES, "a")
+    #write headers
+    if expectedTarget == None:
+        file_hashes.write("section,information;\n")
+        file_hashes.write("title," + DimSanitize("Example Title") + ";\n")
+        file_hashes.write("section,hashes;\n")
+
+    #main reference file
     file_combined = open(FILENAME_COMBINED, "r", encoding="utf-8")
     dimp_hashes = Dimperpreter(file_combined)
     #scope to hashes
@@ -462,28 +549,28 @@ def OptimizeContent():
             if args[1] == "hashes":
                 break
     #function for writing
-    file_hashes_next_id = 0
-
-
-
     def WriteNextHashes(count):
-        global file_hashes_next_id
+        nonlocal file_hashes_next_id
         while count > 0:
             count -= 1
             args = dimp_hashes.Next()
             file_hashes.write(DimSanitize(args[0].strip()) + "," + DimSanitize(args[1]) + ";\n")
             file_hashes_next_id += 1
     def SkipHash():
-        global file_hashes_next_id
+        nonlocal file_hashes_next_id
         dimp_hashes.Next()
         file_hashes_next_id += 1
+
+    #mapper.dim
+    file_mapper = open(FILENAME_HASHES_NEW_MAP, "a", encoding="utf-8")
 
     #scan objects_new.dim
     file_objects_new = open(FILENAME_OBJECTS_TO_CORRECT, "r", encoding="utf-8")
     dimp = Dimperpreter(file_objects_new)
     section = ""
-    current_dir = config["targetSourceDirectory"]
+    current_dir = start_path
     current_target = current_dir
+    current_combo = 0
     while True:
         #read args
         args = dimp.Next()
@@ -506,88 +593,119 @@ def OptimizeContent():
                 if command == "in":
                     current_dir = os.path.join(current_dir, args[1])
                     current_target = current_dir
+                    current_combo = 0
                 elif command == "out":
                     i = int(args[1])
                     while i > 0:
                         i -= 1
                         current_dir = Path(current_dir).parent
                     current_target = current_dir
+                    current_combo = 0
                 elif command == "object":
                     current_target = os.path.join(current_dir, args[1])
+                    current_combo = 0
                     print(current_target)
+                
+                #update combo
+                current_combo += 1
+
                 #content modifier
-                elif command == "*content":
-                    id_in_new = int(args[1])
-                    id = -1
-                    #correct id
-                    if new_content_hashes_mapper[id_in_new] != -1:
-                        #apply already inserted new hash
-                        id = new_content_hashes_mapper[id_in_new]
-                    else:
-                        #try to insert new hash
+                #skip if we are searching for the proper target
+                if expectedTarget != None:
+                    if expectedTarget == current_target:
+                        if expectedCombo == current_combo: 
+                            expectedTarget = None
+                    #small print
+                    if command == "*content":
+                        print("Already uploaded.")
+                    continue
+                else:
+                    #only if we have reached the target we had not saved before
+                    #content modifier
+                    if command == "*content":
+                        #log
+                        print("cloud <--", current_target)
+                        #vars
+                        id_in_new = int(args[1])
                         id = -1
-                        try:
-                            id = content_hashes_stay.index(False)
-                        except:
-                            id = -1
-                        # update/upload or upload
-                        salt = None
-                        if id != -1:
-                            #check if hash is empty
-                            doUpload = (len(content_hashes[id]) == 0)
-
-                            #insert new hash
-                            content_hashes_stay[id] = True
-                            content_hashes[id] = new_content_hashes[id_in_new]
-                            #write up current hashes
-                            WriteNextHashes(id - file_hashes_next_id)
-                            SkipHash()
-
-                            #generate new entry
-                            #get salt
-                            salt = crypto.generate_salt(SALT_LENGTH)
-                            #encrypt file
-                            output_path = FILENAME_TEMP
-                            EncryptFile(current_target, output_path, salt)
-                            
-                            #update in cloud
-                            if doUpload:
-                                cloud.upload(id + 1, output_path)
-                            else:
-                                cloud.update(id + 1, output_path)
-
+                        #correct id
+                        if new_content_hashes_mapper[id_in_new] != -1:
+                            #apply already inserted new hash
+                            id = new_content_hashes_mapper[id_in_new]
                         else:
-                            #skip deleting and copy remaining hashes
-                            while file_hashes_next_id < len(content_hashes):
-                                args = dimp_hashes.Next()
-                                file_hashes.write(DimSanitize(args[0].strip()) + "," + DimSanitize(args[1].strip()) + ";\n")
-                                file_hashes_next_id += 1
+                            #try to insert new hash
+                            id = -1
+                            try:
+                                id = content_hashes_stay.index(False)
+                            except:
+                                id = -1
+                            # update/upload or upload
+                            salt = None
+                            if id != -1:
+                                #check if hash is empty
+                                doUpload = (len(content_hashes[id]) == 0)
 
-                            #put new id
-                            id = upload_id_gen
-                            upload_id_gen += 1
+                                #generate new entry
+                                #get salt
+                                salt = crypto.generate_salt(SALT_LENGTH)
+                                #encrypt file
+                                output_path = FILENAME_TEMP
+                                EncryptFile(current_target, output_path, salt)
+                                
+                                #update in cloud
+                                if doUpload:
+                                    cloud.upload(id + 1, output_path)
+                                else:
+                                    cloud.update(id + 1, output_path)
 
-                            #generate new entry
-                            #get salt
-                            salt = crypto.generate_salt(SALT_LENGTH)
-                            #encrypt file
-                            output_path = FILENAME_TEMP
-                            EncryptFile(current_target, output_path, salt)
+                                #TODO: HANDLE FAILURES
 
-                            #upload new file into the cloud
-                            cloud.upload(id + 1, output_path)
+                                #insert new hash
+                                content_hashes_stay[id] = True
+                                content_hashes[id] = new_content_hashes[id_in_new]
+                                #write up current hashes
+                                WriteNextHashes(id - file_hashes_next_id)
+                                SkipHash()
+
+                            else:
+                                #put new id
+                                id = upload_id_gen
+                                upload_id_gen += 1
+
+                                #generate new entry
+                                #get salt
+                                salt = crypto.generate_salt(SALT_LENGTH)
+                                #encrypt file
+                                output_path = FILENAME_TEMP
+                                EncryptFile(current_target, output_path, salt)
+
+                                #upload new file into the cloud
+                                cloud.upload(id + 1, output_path)
+
+                                #TODO: HANDLE FAILURES
+
+                                #skip deleting and copy remaining hashes
+                                while file_hashes_next_id < len(content_hashes):
+                                    args = dimp_hashes.Next()
+                                    file_hashes.write(DimSanitize(args[0].strip()) + "," + DimSanitize(args[1].strip()) + ";\n")
+                                    file_hashes_next_id += 1
+                                
+                            #write new hash
+                            file_hashes.write(DimSanitize(new_content_hashes[id_in_new].hex()) + "," + DimSanitize(salt.hex()) + ";\n")
                             
-                        #write new hash
-                        file_hashes.write(DimSanitize(new_content_hashes[id_in_new].hex()) + "," + DimSanitize(salt.hex()) + ";\n")
-                        
-                        #save new id
-                        new_content_hashes_mapper[id_in_new] = id
+                            #save new id
+                            new_content_hashes_mapper[id_in_new] = id
+                            file_mapper.write(DimSanitize(str(id)) + ";") #safe for this kind of scanning
 
-                    #correct args
-                    args[0] = "\ncontent"
-                    args[1] = str(id)
+                        #correct args
+                        args[0] = "\ncontent"
+                        args[1] = str(id)
         #write args
         WriteObject(args)
+
+        #Break here
+        CheckDeath()
+
     #close objects.dim
     file_objects.close()
     #close objects_new.dim
@@ -596,6 +714,7 @@ def OptimizeContent():
 
     #start deleting hashes that are not used
     #find id first element that has next elements all to be deleted
+    print("Cleaning up unused content.")
     id = len(content_hashes) - 1
     while id >= file_hashes_next_id:
         #check if end
@@ -604,6 +723,11 @@ def OptimizeContent():
         #delete this last file (if it hasn't been already deleted)
         if len(content_hashes[id]) != 0:
             cloud.delete(id + 1)
+
+
+            #TODO: HANDLE ERRORS
+
+
         #next
         id -= 1
     #save elment till id of non empty element is
@@ -616,6 +740,11 @@ def OptimizeContent():
             #delete in the cloud (if hasn't been already deleted)
             if len(content_hashes[file_hashes_next_id]) != 0:
                 cloud.delete(file_hashes_next_id + 1)
+                
+                
+                #TODO: HANDLE ERRORS
+
+
             #save empty hash
             file_hashes.write(",;\n")
         #next id
@@ -642,8 +771,8 @@ file_new_content_hashes = open(FILENAME_HASHES_NEW, "a")
 ScanObjects(config["targetSourceDirectory"], FILENAME_OBJECTS_TO_CORRECT)
 file_new_content_hashes.close()
 #Optimize content
-#OptimizeContent()
+OptimizeContent(config["targetSourceDirectory"])
 
 # Finishing
-#PackManifest()
-#cloud.upload(0, FILENAME_COMBINED_FINAL)
+PackManifest()
+cloud.upload(0, FILENAME_COMBINED_FINAL)
