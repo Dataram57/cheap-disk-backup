@@ -8,6 +8,7 @@ import shutil
 from Dimperpreter import Dimperpreter
 import struct
 import json
+import signal
 
 BUFFER_SIZE = 8192
 #default
@@ -22,6 +23,23 @@ FILENAME_OBJECTS_TO_CORRECT = "objects_new.dim"
 
 #LoadObjects
 FILENAME_HASHES_NEW = "new_hashes.dim"
+
+#================================================================
+# Killing
+
+toBeKilled = False
+def KillMe(signum, frame):
+    global toBeKilled
+    print("Killing...")
+    toBeKilled = True
+signal.signal(signal.SIGINT, KillMe)
+
+def CheckDeath():
+    global toBeKilled
+    if toBeKilled:
+        print("Killed.")
+        exit(0)
+        return
 
 #================================================================
 # Load config and modules
@@ -161,7 +179,7 @@ def ScanObjects(start_path, output_path):
                 args = dimp.Next()
                 if not args:
                     break
-                if len(args[0]) > 0:
+                if len(args[0].strip()) > 0:
                     new_content_hashes.append(bytes.fromhex(args[0]))
                     new_content_hashes_mapper.append(-1)
             #end
@@ -184,7 +202,7 @@ def ScanObjects(start_path, output_path):
         file_objects.write(";\n")
 
     #start scanning
-    file_objects.write("section,objects;\n")
+    WriteObject("section", "objects")
     count = 0
     last_root=start_path
     for root, dirs, files in os.walk(start_path, onerror=lambda e: None, followlinks=False):
@@ -252,7 +270,8 @@ def ScanObjects(start_path, output_path):
             except (PermissionError, FileNotFoundError):
                 pass
 
-            #TODO: BREAK HERE
+            #Break here
+            CheckDeath()
 
 #================================================================
 # Manifest
