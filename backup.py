@@ -18,6 +18,7 @@ FILENAME_HASHES = "hashes.dim"
 FILENAME_COMBINED = "combined.dim"
 FILENAME_COMBINED_ENCRYPTED = "combined.enc.bin"
 FILENAME_COMBINED_FINAL = "combined.bin"
+FILENAME_COMBINED_FINAL_UPLOAD = "combined_upload.bin"
 #Update
 FILENAME_OBJECTS_TO_CORRECT = "objects_new.dim"
 
@@ -89,42 +90,26 @@ def sha256_file(path, chunk_size=8192):
 def RegisterContent(file_path):
     global file_hashes
     hash_bytes = sha256_file(file_path)
-    if is_update:
+
+    try:
+        # old content is allowed to stay unchanged on the cloud
+        id = content_hashes.index(hash_bytes)
+        content_hashes_stay[id] = True
+        return id
+    except ValueError:
+        # hash is new to content_hashes
         try:
-            # old content is allowed to stay unchanged on the cloud
-            id = content_hashes.index(hash_bytes)
-            content_hashes_stay[id] = True
-            return id
+            # try to find it in the new_content_hashes
+            return -(new_content_hashes.index(hash_bytes) + 1)
         except ValueError:
-            # hash is new to content_hashes
-            try:
-                # try to find it in the new_content_hashes
-                return -(new_content_hashes.index(hash_bytes) + 1)
-            except ValueError:
-                #new hash found
-                new_content_hashes.append(hash_bytes)
-                new_content_hashes_mapper.append(-1)
-                #save hash
-                file_new_content_hashes.write(DimSanitize(hash_bytes.hex()) + ";\n")
-                #return id
-                return -len(new_content_hashes)
-    else:
-        try:
-            return content_hashes.index(hash_bytes)
-        except ValueError:
-            #get salt
-            salt = crypto.generate_salt(SALT_LENGTH)
-            #encrypt file
-            output_path = FILENAME_TEMP
-            EncryptFile(file_path, output_path, salt)
-            #upload new content (id=0 reserved for the manifest)
-            id = len(content_hashes)
-            cloud.upload(id + 1, output_path)
-            #add new hash
-            content_hashes.append(hash_bytes)
-            file_hashes.write(DimSanitize(hash_bytes.hex()) + "," + DimSanitize(salt.hex()) + ";\n")
-            #return 
-            return id
+            #new hash found
+            new_content_hashes.append(hash_bytes)
+            new_content_hashes_mapper.append(-1)
+            #save hash
+            file_new_content_hashes.write(DimSanitize(hash_bytes.hex()) + ";\n")
+            #return id
+            return -len(new_content_hashes)
+    
 
 #================================================================
 # scan
@@ -296,7 +281,7 @@ def PackManifest():
     crypto.encrypt(FILENAME_COMBINED, FILENAME_COMBINED_ENCRYPTED, salt)
 
     # write file
-    with open(FILENAME_COMBINED_FINAL, "wb") as out_file:
+    with open(FILENAME_COMBINED_FINAL_UPLOAD, "wb") as out_file:
         #write hash + salt
         out_file.write(integrity_hash)
         out_file.write(struct.pack("I", len(salt)))
@@ -325,61 +310,6 @@ def CreateEmptyManifest():
 
 #loads already existing hashes
 def LoadArrays():
-    #read headers
-    file_combined = open(FILENAME_COMBINED_FINAL, "rb")
-    integrity_hash = file_combined.read(32)
-    length = struct.unpack("I", file_combined.read(4))[0]
-    salt = file_combined.read(length)
-    file_combined.close()
-    #cut headers
-    CUT = (0 + 32) + (4 + length)
-    with open(FILENAME_COMBINED_FINAL, "rb") as src, open(FILENAME_COMBINED_ENCRYPTED, "wb") as dst:
-        src.seek(CUT)
-        shutil.copyfileobj(src, dst)
-    #os.replace(FILENAME_COMBINED_ENCRYPTED, FILENAME_COMBINED_FINAL)
-    #decrypt
-    crypto.decrypt(FILENAME_COMBINED_ENCRYPTED, FILENAME_COMBINED, salt)
-    #os.replace("combined_decrypted.bin", FILENAME_COMBINED_FINAL)
-
-    #check integrity_hash
-    if sha256_file(FILENAME_COMBINED) != integrity_hash:
-        #perform
-        print("hashes don't match")
-    else:
-        #load hashes
-        file_combined = open(FILENAME_COMBINED, "r", encoding="utf-8")
-        dimp = Dimperpreter(file_combined)
-        section = ""
-        while True:
-            #read args
-            args = dimp.Next()
-            if not args:
-                break
-            command = args[0].strip()
-
-            #check end of current section
-            if command == "section":
-                match section:
-                    case "hashes":
-                        break
-                #update section
-                section = args[1].strip()
-
-            #states
-            match section:
-                case "hashes":
-                    if command == "section":
-                        #init
-                        print("Reading hashes")
-                    else:
-                        #register hash
-                        content_hashes.append(bytes.fromhex(args[0]))
-                        content_hashes_stay.append(False)
-        #close dimp
-        file_combined.close()
-        del dimp
-        #all hashes are now loaded
-        print("Loaded " + str(len(content_hashes)) + " content hashes.")
     #read headers
     file_combined = open(FILENAME_COMBINED_FINAL, "rb")
     integrity_hash = file_combined.read(32)
@@ -775,4 +705,4 @@ OptimizeContent(config["targetSourceDirectory"])
 
 # Finishing
 PackManifest()
-cloud.upload(0, FILENAME_COMBINED_FINAL)
+cloud.upload(0, FILENAME_COMBINED_FINAL_UPLOAD)
