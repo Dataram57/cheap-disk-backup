@@ -34,6 +34,7 @@
         devShells.${system}.default = pkgs.mkShell {
             packages = [
                 pkgs.python3
+                pkgs.python313Packages.pathspec
                 pkgs.python313Packages.boto3
                 pkgs.python313Packages.pycryptodome
             ];

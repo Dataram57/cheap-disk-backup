@@ -81,6 +81,21 @@ def JudgeTransaction(result, failureCommand):
     #return
     return False
 
+from pathspec import PathSpec
+from pathspec.patterns import GitWildMatchPattern
+ignore_include = PathSpec.from_lines(GitWildMatchPattern, config["ignore"]["include"])
+ignore_exclude = PathSpec.from_lines(GitWildMatchPattern, config["ignore"]["exclude"])
+def isIgnored(path) -> bool:
+    # First: does it match any ignore rule?
+    if not ignore_include.match_file(path):
+        return False
+
+    # Second: is it explicitly excluded (un-ignored)?
+    if ignore_exclude.match_file(path):
+        return False
+
+    return True
+    
 #================================================================
 # Manifest
 
@@ -92,7 +107,6 @@ def DimSanitize(arg):
 
 content_hashes = []         #store only hashes (salt is applied elsewhere)
 content_hashes_stay = []    #store only Booleans to mark if cloud stored content is still up to date
-is_update = False
 new_content_hashes = []     #store only hashees (salt is applied during the replace process)
 new_content_hashes_mapper = []  #stores only new indexes
 file_new_content_hashes = None
@@ -199,7 +213,7 @@ def ScanObjects(start_path, output_path):
     def WriteObject(*args):
         #skip
         if expectedTarget != None:
-            return
+            return            
         #write
         for i, arg in enumerate(args):
             file_objects.write(DimSanitize(arg))
@@ -210,15 +224,25 @@ def ScanObjects(start_path, output_path):
     #start scanning
     WriteObject("section", "objects")
     count = 0
-    last_root=start_path
+    last_root = start_path
+    root_relative = ""
     for root, dirs, files in os.walk(start_path, onerror=lambda e: None, followlinks=False):
         #check what kind of step
         if last_root != root:
             r = cd_up(last_root, root)
             if r > 0:
                 WriteObject("out", r)
+                while r > 0:
+                    r -= 1
+                    root_relative = Path(root_relative).parent
             WriteObject("in", os.path.basename(root))
             last_root = root
+            root_relative = os.path.join(root_relative, os.path.basename(root))
+
+            #check if dir is skipped
+            if isIgnored(root_relative):
+                print("Ignored.")
+                continue
 
             #register dir info
             st = os.lstat(root)
@@ -228,16 +252,22 @@ def ScanObjects(start_path, output_path):
         for name in files + dirs:
             #get path
             path = os.path.join(root, name)
+            pathRelative = os.path.join(root_relative, name)
             
             if expectedTarget != None:
-                print("=:", path)
+                print("Discovery Saved:", pathRelative)
             else:
-                print("+:", path)
+                print("Discovered:", pathRelative)
 
             #check if reached proper target
             if expectedTarget != None:
                 if expectedTarget == path:
                     expectedTarget = None
+                continue
+            
+            #ignore
+            if isIgnored(pathRelative):
+                print("Ignored.")
                 continue
 
             #rest
@@ -554,7 +584,7 @@ def OptimizeContent(start_path):
                 elif command == "object":
                     current_target = os.path.join(current_dir, args[1])
                     current_combo = 0
-                    print(current_target)
+                    #print(current_target)
                 
                 #update combo
                 current_combo += 1
@@ -574,7 +604,7 @@ def OptimizeContent(start_path):
                     #content modifier
                     if command == "*content":
                         #log
-                        print("cloud <--", current_target)
+                        print("Adding to cloud:", current_target)
                         #vars
                         id_in_new = int(args[1])
                         id = -1
@@ -711,8 +741,6 @@ def OptimizeContent(start_path):
 #================================================================
 # Main
 
-is_update = True
-
 #check if empty manifest has to be made.
 if not Path(FILENAME_COMBINED_FINAL).is_file():
     if not cloud.download(0, FILENAME_COMBINED_FINAL):
@@ -732,13 +760,15 @@ while True:
     if JudgeTransaction(cloud.upload(0, FILENAME_COMBINED_FINAL_UPLOAD), config["cloud"]["onUploadError"]):
         break
 
+#================================================================
+# Cleaning
 
+#delete saved files
 def DeleteFile(path):
     try:
         os.remove(path)
     except:
         0
-#delete saved files
 DeleteFile(FILENAME_TEMP)
 DeleteFile(FILENAME_OBJECTS)
 DeleteFile(FILENAME_HASHES)
