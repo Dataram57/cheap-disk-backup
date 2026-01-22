@@ -9,24 +9,25 @@ from Dimperpreter import Dimperpreter
 import struct
 import json
 import signal
+import time
 
 BUFFER_SIZE = 8192
 #default
-FILENAME_TEMP = "temp_file.bin"
-FILENAME_OBJECTS = "objects.dim"
-FILENAME_HASHES = "hashes.dim"
-FILENAME_COMBINED = "combined.dim"
-FILENAME_COMBINED_ENCRYPTED = "combined.enc.bin"
-FILENAME_COMBINED_FINAL = "combined.bin"
-FILENAME_COMBINED_FINAL_UPLOAD = "combined_upload.bin"
+FILENAME_TEMP = "backup_temp_file.bin"
+FILENAME_OBJECTS = "backup_objects.dim"
+FILENAME_HASHES = "backup_hashes.dim"
+FILENAME_COMBINED = "backup_combined.dim"
+FILENAME_COMBINED_ENCRYPTED = "backup_combined.dim.enc"
+FILENAME_COMBINED_FINAL = "backup_combined.bin"
+FILENAME_COMBINED_FINAL_UPLOAD = "backup_combined_upload.bin"
 #Update
-FILENAME_OBJECTS_TO_CORRECT = "objects_new.dim"
+FILENAME_OBJECTS_TO_CORRECT = "backup_objects_new.dim"
 
 #ScanObjects
-FILENAME_HASHES_NEW = "new_hashes.dim"
+FILENAME_HASHES_NEW = "backup_new_hashes.dim"
 
 #OptimizeObjects
-FILENAME_HASHES_NEW_MAP = "new_content_hashes_mapper.dim"
+FILENAME_HASHES_NEW_MAP = "backup_new_content_hashes_mapper.dim"
 
 #================================================================
 # Killing
@@ -62,6 +63,23 @@ def EncryptFile(file_path, output_path, salt):
     #add salt
     with open(output_path, "ab") as f:
          f.write(salt)
+
+def JudgeTransaction(result, failureCommand):
+    #positive case
+    if result:
+        return True
+    #wrong cases
+    print("Recent transaction failed.")
+    failureCommand = failureCommand.strip().split(" ")
+    match failureCommand[0]:
+        case "stop":
+            print("Exitting...")
+            exit(0)
+        case "wait":
+            print("Waiting", failureCommand[1], "seconds...")
+            time.sleep(float(failureCommand[1]))
+    #return
+    return False
 
 #================================================================
 # Manifest
@@ -373,6 +391,8 @@ def LoadArrays():
 #- FILENAME_HASHES - new list of hashes
 #- FILENAME_OBJECTS - adjusted object hierarchy
 def OptimizeContent(start_path):
+    global config
+
     #current content id
     file_hashes_next_id = 0
     upload_id_gen = len(content_hashes)
@@ -562,6 +582,7 @@ def OptimizeContent(start_path):
                         if new_content_hashes_mapper[id_in_new] != -1:
                             #apply already inserted new hash
                             id = new_content_hashes_mapper[id_in_new]
+                            print("Already uploaded.")
                         else:
                             #try to insert new hash
                             id = -1
@@ -572,8 +593,6 @@ def OptimizeContent(start_path):
                             # update/upload or upload
                             salt = None
                             if id != -1:
-                                #check if hash is empty
-                                doUpload = (len(content_hashes[id]) == 0)
 
                                 #generate new entry
                                 #get salt
@@ -583,12 +602,16 @@ def OptimizeContent(start_path):
                                 EncryptFile(current_target, output_path, salt)
                                 
                                 #update in cloud
-                                if doUpload:
-                                    cloud.upload(id + 1, output_path)
+                                if len(content_hashes[id]) == 0:
+                                    #hash is empty, so upload
+                                    while True:
+                                        if JudgeTransaction(cloud.upload(id + 1, output_path), config["cloud"]["onUploadError"]):
+                                            break
                                 else:
-                                    cloud.update(id + 1, output_path)
-
-                                #TODO: HANDLE FAILURES
+                                    #update
+                                    while True:
+                                        if JudgeTransaction(cloud.update(id + 1, output_path), config["cloud"]["onUpdateError"]):
+                                            break
 
                                 #insert new hash
                                 content_hashes_stay[id] = True
@@ -610,9 +633,9 @@ def OptimizeContent(start_path):
                                 EncryptFile(current_target, output_path, salt)
 
                                 #upload new file into the cloud
-                                cloud.upload(id + 1, output_path)
-
-                                #TODO: HANDLE FAILURES
+                                while True:
+                                    if JudgeTransaction(cloud.upload(id + 1, output_path), config["cloud"]["onUploadError"]):
+                                        break
 
                                 #skip deleting and copy remaining hashes
                                 while file_hashes_next_id < len(content_hashes):
@@ -705,4 +728,27 @@ OptimizeContent(config["targetSourceDirectory"])
 
 # Finishing
 PackManifest()
-cloud.upload(0, FILENAME_COMBINED_FINAL_UPLOAD)
+while True:
+    if JudgeTransaction(cloud.upload(0, FILENAME_COMBINED_FINAL_UPLOAD), config["cloud"]["onUploadError"]):
+        break
+
+
+def DeleteFile(path):
+    try:
+        os.remove(path)
+    except:
+        0
+#delete saved files
+DeleteFile(FILENAME_TEMP)
+DeleteFile(FILENAME_OBJECTS)
+DeleteFile(FILENAME_HASHES)
+DeleteFile(FILENAME_COMBINED)
+DeleteFile(FILENAME_COMBINED_ENCRYPTED)
+DeleteFile(FILENAME_COMBINED_FINAL)
+DeleteFile(FILENAME_COMBINED_FINAL_UPLOAD )
+#Update
+DeleteFile(FILENAME_OBJECTS_TO_CORRECT)
+#ScanObjects
+DeleteFile(FILENAME_HASHES_NEW)
+#OptimizeObjects
+DeleteFile(FILENAME_HASHES_NEW_MAP)
