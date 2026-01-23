@@ -12,6 +12,7 @@ import signal
 import time
 
 BUFFER_SIZE = 8192
+INTEGRITY_HASH_LENGTH = 32
 #default
 FILENAME_TEMP = "backup_temp_file.bin"
 FILENAME_OBJECTS = "backup_objects.dim"
@@ -330,10 +331,8 @@ def PackManifest():
 
     # write file
     with open(FILENAME_COMBINED_FINAL_UPLOAD, "wb") as out_file:
-        #write hash + salt
+        #write hash
         out_file.write(integrity_hash)
-        out_file.write(struct.pack("I", len(salt)))
-        out_file.write(salt)
         #write encrypted combined.dim
         with open(FILENAME_COMBINED_ENCRYPTED, "rb") as in_file:
             while True:
@@ -341,6 +340,8 @@ def PackManifest():
                 if not chunk:
                     break
                 out_file.write(chunk)
+        #write salt
+        out_file.write(salt)
 
 def CreateEmptyManifest():
     f = open(FILENAME_HASHES, "w")
@@ -352,27 +353,43 @@ def CreateEmptyManifest():
     PackManifest()
     os.remove(FILENAME_HASHES)
     os.remove(FILENAME_OBJECTS)
+    os.replace(FILENAME_COMBINED_FINAL_UPLOAD, FILENAME_COMBINED_FINAL)
 
 #================================================================
 # Differential backup
 
 #loads already existing hashes
 def LoadArrays():
-    #read headers
-    file_combined = open(FILENAME_COMBINED_FINAL, "rb")
-    integrity_hash = file_combined.read(32)
-    length = struct.unpack("I", file_combined.read(4))[0]
-    salt = file_combined.read(length)
-    file_combined.close()
-    #cut headers
-    CUT = (0 + 32) + (4 + length)
-    with open(FILENAME_COMBINED_FINAL, "rb") as src, open(FILENAME_COMBINED_ENCRYPTED, "wb") as dst:
-        src.seek(CUT)
-        shutil.copyfileobj(src, dst)
-    #os.replace(FILENAME_COMBINED_ENCRYPTED, FILENAME_COMBINED_FINAL)
+    #read head and tail
+    integrity_hash = None
+    salt = None
+    with open(FILENAME_COMBINED_FINAL, "rb") as f:
+        file_size = os.path.getsize(FILENAME_COMBINED_FINAL)
+        if file_size < INTEGRITY_HASH_LENGTH + SALT_LENGTH:
+            raise ValueError("File too small")
+        # --- Head ---
+        integrity_hash = f.read(INTEGRITY_HASH_LENGTH)
+        # --- Tail ---
+        f.seek(file_size - SALT_LENGTH)
+        salt = f.read(SALT_LENGTH)
+    #cut head and tail
+    with open(FILENAME_COMBINED_FINAL, "rb") as fin, open(FILENAME_COMBINED_ENCRYPTED, "wb") as fout:
+        file_size = os.path.getsize(FILENAME_COMBINED_FINAL)
+
+        start = INTEGRITY_HASH_LENGTH
+        end = file_size - SALT_LENGTH
+        length = end - start
+
+        fin.seek(start)
+
+        while length > 0:
+            chunk = fin.read(min(BUFFER_SIZE, length))
+            if not chunk:
+                break
+            fout.write(chunk)
+            length -= len(chunk)
     #decrypt
     crypto.decrypt(FILENAME_COMBINED_ENCRYPTED, FILENAME_COMBINED, salt)
-    #os.replace("combined_decrypted.bin", FILENAME_COMBINED_FINAL)
 
     #check integrity_hash
     if sha256_file(FILENAME_COMBINED) != integrity_hash:

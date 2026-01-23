@@ -10,7 +10,12 @@ import struct
 import json
 
 BUFFER_SIZE = 8192
+INTEGRITY_HASH_LENGTH = 32
 SALT_LENGTH = 1024
+
+FILENAME_COMBINED_FINAL = "restore_combined.bin"
+FILENAME_COMBINED_ENCRYPTED = "restore_combined_cut.bin"
+FILENAME_COMBINED = "combined.bin"
 
 #================================================================
 # Load config and modules
@@ -53,35 +58,47 @@ def sha256_file(path, chunk_size=8192):
 # Main
 
 # download manifest
-cloud.download(0, "combined.bin")
+cloud.download(0, FILENAME_COMBINED_FINAL)
 
-#read headers
-file_combined = open("combined.bin", "rb")
-integrity_hash = file_combined.read(32)
-length = struct.unpack("I", file_combined.read(4))[0]
-salt = file_combined.read(length)
-file_combined.close()
-#cut headers
-print(length)
-CUT = (0 + 32) + (4 + length)
-with open("combined.bin", "rb") as src, open("combined_cut.bin", "wb") as dst:
-    src.seek(CUT)
-    shutil.copyfileobj(src, dst)
-os.replace("combined_cut.bin", "combined.bin")
-#decrypt
-crypto.decrypt("combined.bin", "combined_decrypted.bin", salt)
-os.replace("combined_decrypted.bin", "combined.bin")
+#read head and tail
+integrity_hash = None
+salt = None
+with open(FILENAME_COMBINED_FINAL, "rb") as f:
+    file_size = os.path.getsize(FILENAME_COMBINED_FINAL)
+    if file_size < INTEGRITY_HASH_LENGTH + SALT_LENGTH:
+        raise ValueError("File too small")
+    # --- Head ---
+    integrity_hash = f.read(INTEGRITY_HASH_LENGTH)
+    # --- Tail ---
+    f.seek(file_size - SALT_LENGTH)
+    salt = f.read(SALT_LENGTH)
+#cut head and tail
+with open(FILENAME_COMBINED_FINAL, "rb") as fin, open(FILENAME_COMBINED_ENCRYPTED, "wb") as fout:
+    file_size = os.path.getsize(FILENAME_COMBINED_FINAL)
 
+    start = INTEGRITY_HASH_LENGTH
+    end = file_size - SALT_LENGTH
+    length = end - start
+
+    fin.seek(start)
+
+    while length > 0:
+        chunk = fin.read(min(BUFFER_SIZE, length))
+        if not chunk:
+            break
+        fout.write(chunk)
+        length -= len(chunk)
 #decrypt
-#...
+crypto.decrypt(FILENAME_COMBINED_ENCRYPTED, FILENAME_COMBINED, salt)
+
 
 #check integrity_hash
-if sha256_file("combined.bin") != integrity_hash:
+if sha256_file(FILENAME_COMBINED) != integrity_hash:
     print("hashes don't match")
     exit(1)
 
 #start recovering the data
-file_combined = open("combined.bin", "r", encoding="utf-8")
+file_combined = open(FILENAME_COMBINED, "r", encoding="utf-8")
 dimp = Dimperpreter(file_combined)
 section = None
 content_salt = []       #(salt, CachedFile)
@@ -176,4 +193,17 @@ while True:
 
                 0
 
+
+#================================================================
+# Cleaning
+
+#delete saved files
+def DeleteFile(path):
+    try:
+        os.remove(path)
+    except:
+        0
+DeleteFile(FILENAME_COMBINED_FINAL)
+DeleteFile(FILENAME_COMBINED_ENCRYPTED)
+DeleteFile(FILENAME_COMBINED)
 
