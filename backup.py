@@ -372,13 +372,26 @@ def LoadArrays():
     integrity_hash = None
     salt = None
     #read and cut salt
-    with open(FILENAME_COMBINED_FINAL, "r+b") as f:
+    with open(FILENAME_COMBINED_FINAL, "rb") as src:
         size = os.path.getsize(FILENAME_COMBINED_FINAL)
-        f.seek(size - SALT_LENGTH)
-        salt = f.read(SALT_LENGTH)   # read the tail
-        f.truncate(size - SALT_LENGTH)     # remove it
+        data_size = size - SALT_LENGTH
+        # Read the salt from the end
+        src.seek(size - SALT_LENGTH)
+        salt = src.read(SALT_LENGTH)
+
+        # Open destination file for writing
+        with open(FILENAME_COMBINED_ENCRYPTED, "wb") as dst:
+            src.seek(0)
+            remaining = data_size
+            while remaining > 0:
+                chunk_size = min(BUFFER_SIZE, remaining)
+                chunk = src.read(chunk_size)
+                if not chunk:
+                    break
+                dst.write(chunk)
+                remaining -= len(chunk)
     #decrypt
-    crypto.decrypt(FILENAME_COMBINED_FINAL, FILENAME_COMBINED, salt)
+    crypto.decrypt(FILENAME_COMBINED_ENCRYPTED, FILENAME_COMBINED, salt)
     #read and cut integrity hash
     with open(FILENAME_COMBINED, "r+b") as f:
         size = os.path.getsize(FILENAME_COMBINED)
