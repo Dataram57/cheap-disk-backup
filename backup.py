@@ -639,6 +639,19 @@ def OptimizeContent(start_path):
                             id = new_content_hashes_mapper[id_in_new]
                             print("Already uploaded.")
                         else:
+                            #copy file to temporary safe space...
+                            
+                            #check if file exists
+                            #if not then: reject all with the same content hash
+
+                            #recalculate hash (no problem, except suspicions of replay attacks on restore.py)
+                            #if hash doesn't match then: reject all with the same content hash
+
+                            #id for rejection might be: -2
+                            #+also change these:
+                            # new_content_hashes[id_in_new] = b''
+                            # salt = b''
+
                             #try to insert new hash
                             id = -1
                             try:
