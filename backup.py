@@ -15,6 +15,7 @@ INTEGRITY_HASH_LENGTH = 32
 SALT_LENGTH = 1024
 #default
 FILENAME_TEMP = "backup_temp_file.bin"
+FILENAME_TEMP_ORIGINAL = "backup_temp_file_original.bin"
 FILENAME_OBJECTS = "backup_objects.dim"
 FILENAME_HASHES = "backup_hashes.dim"
 FILENAME_COMBINED = "backup_combined.dim"
@@ -652,22 +653,32 @@ def OptimizeContent(start_path):
                             # new_content_hashes[id_in_new] = b''
                             # salt = b''
 
-                            #try to insert new hash
+                            #copy file
                             id = -1
                             try:
-                                id = content_hashes_stay.index(False)
-                            except:
+                                #copy file
+                                shutil.copy(current_target, FILENAME_TEMP_ORIGINAL)
+                                #check hash again
+                                if sha256_file(FILENAME_TEMP_ORIGINAL) != new_content_hashes[id_in_new]:
+                                    raise
+                                #try to insert new hash
                                 id = -1
+                                try:
+                                    id = content_hashes_stay.index(False)
+                                except:
+                                    id = -1
+                            except:
+                                id = -2
                             # update/upload or upload
                             salt = None
-                            if id != -1:
+                            if id >= 0:
 
                                 #generate new entry
                                 #get salt
                                 salt = crypto.generate_salt(SALT_LENGTH)
                                 #encrypt file
                                 output_path = FILENAME_TEMP
-                                EncryptFile(current_target, output_path, salt)
+                                EncryptFile(FILENAME_TEMP_ORIGINAL, output_path, salt)
                                 
                                 #update in cloud
                                 if len(content_hashes[id]) == 0:
@@ -688,7 +699,7 @@ def OptimizeContent(start_path):
                                 WriteNextHashes(id - file_hashes_next_id)
                                 SkipHash()
 
-                            else:
+                            elif id == -1:
                                 #put new id
                                 id = upload_id_gen
                                 upload_id_gen += 1
@@ -698,7 +709,7 @@ def OptimizeContent(start_path):
                                 salt = crypto.generate_salt(SALT_LENGTH)
                                 #encrypt file
                                 output_path = FILENAME_TEMP
-                                EncryptFile(current_target, output_path, salt)
+                                EncryptFile(FILENAME_TEMP_ORIGINAL, output_path, salt)
 
                                 #upload new file into the cloud
                                 while True:
@@ -710,9 +721,17 @@ def OptimizeContent(start_path):
                                     args = dimp_hashes.Next()
                                     file_hashes.write(DimSanitize(args[0].strip()) + "," + DimSanitize(args[1].strip()) + ";\n")
                                     file_hashes_next_id += 1
-                                
-                            #write new hash
-                            file_hashes.write(DimSanitize(new_content_hashes[id_in_new].hex()) + "," + DimSanitize(salt.hex()) + ";\n")
+                            
+                            else:
+                                #reject hash
+                                print("Altered content detected - Rejecting upload of this content!!!")
+                                salt = b''
+                                new_content_hashes[id_in_new] = b'' #only to write this bad hash (next will simply reference -2)
+
+
+                            #write new hash (only if in proper)
+                            if id >= 0:
+                                file_hashes.write(DimSanitize(new_content_hashes[id_in_new].hex()) + "," + DimSanitize(salt.hex()) + ";\n")
                             
                             #save new id
                             new_content_hashes_mapper[id_in_new] = id

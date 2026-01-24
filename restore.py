@@ -38,6 +38,7 @@ def DecryptFile(file_path, output_path, expectedHash):
         salt = f.read(read_size) # read last bytes
         f.truncate(file_size - read_size)
     #check hash
+    print(salt[0:4].hex(), expectedHash[0:4].hex())
     if expectedHash != salt:
         print("REPLAY ATTACK on MANIFEST or CONTENT has been detected!!!")
     #decrypt
@@ -166,21 +167,27 @@ while True:
                     #apply time meta
                     os.utime(current_target, ns=(int(args[8]), int(args[8])), follow_symlinks=False)
                 elif command == "content":
-                    #get salt
-                    p = content_salt[int(args[1])]
-                    if p[1] != None:
-                        #copy cached
-                        shutil.copyfile(p[1], current_target)
+                    print("Content for", current_target)
+                    #check if bad
+                    if int(args[1]) < 0:
+                        #just create empty file
+                        open(current_target, "w").close()
                     else:
-                        #download
-                        cloud.download(int(args[1]) + 1, "temp.bin")
-                        #crypto.decrypt("temp.bin", "temp_decrypted.bin", p[0])
-                        DecryptFile("temp.bin", "temp_decrypted.bin", p[0])
-                        os.replace("temp_decrypted.bin", "temp.bin")
-                        #paste
-                        shutil.copyfile("temp.bin", current_target)
-                        #cache
-                        p[1] = current_target
+                        #get salt
+                        p = content_salt[int(args[1])]
+                        if p[1] != None:
+                            #copy cached
+                            shutil.copyfile(p[1], current_target)
+                        else:
+                            #download
+                            cloud.download(int(args[1]) + 1, "temp.bin")
+                            #crypto.decrypt("temp.bin", "temp_decrypted.bin", p[0])
+                            DecryptFile("temp.bin", "temp_decrypted.bin", p[0])
+                            os.replace("temp_decrypted.bin", "temp.bin")
+                            #paste
+                            shutil.copyfile("temp.bin", current_target)
+                            #cache
+                            p[1] = current_target
                 elif command == "symlink":
                     try:
                         os.symlink(args[1], current_target, target_is_directory=(args[2]=="True"))
@@ -202,7 +209,7 @@ def DeleteFile(path):
         os.remove(path)
     except:
         0
-DeleteFile(FILENAME_COMBINED_FINAL)
-DeleteFile(FILENAME_COMBINED_ENCRYPTED)
-DeleteFile(FILENAME_COMBINED)
+#DeleteFile(FILENAME_COMBINED_FINAL)
+#DeleteFile(FILENAME_COMBINED_ENCRYPTED)
+#DeleteFile(FILENAME_COMBINED)
 
