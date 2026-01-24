@@ -1,4 +1,3 @@
-from shared import *
 import os
 import stat
 import hashlib
@@ -13,6 +12,7 @@ import time
 
 BUFFER_SIZE = 8192
 INTEGRITY_HASH_LENGTH = 32
+SALT_LENGTH = 1024
 #default
 FILENAME_TEMP = "backup_temp_file.bin"
 FILENAME_OBJECTS = "backup_objects.dim"
@@ -96,12 +96,20 @@ def isIgnored(path) -> bool:
         return False
 
     return True
-    
+
+SALT_LENGTH = int(config["crypto"]["saltLength"])
+
 #================================================================
 # Manifest
 
 def DimSanitize(arg):
     return str(arg).replace("@", "@@").replace(",", "@,").replace(";", "@;")
+
+#================================================================
+# Additional
+
+userIDs = []
+groupIDs = []
 
 #================================================================
 # Content Hashes

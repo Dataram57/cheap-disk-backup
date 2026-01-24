@@ -1,4 +1,3 @@
-from shared import *
 import os
 import stat
 import hashlib
@@ -43,6 +42,8 @@ def DecryptFile(file_path, output_path, expectedHash):
         print("REPLAY ATTACK on MANIFEST or CONTENT has been detected!!!")
     #decrypt
     crypto.decrypt(file_path, output_path, salt)
+
+SALT_LENGTH = int(config["crypto"]["saltLength"])
 
 #================================================================
 # hashes
