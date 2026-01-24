@@ -322,8 +322,10 @@ def join_files(file1, file2, output):
 def PackManifest():
     join_files(FILENAME_HASHES, FILENAME_OBJECTS, FILENAME_COMBINED)
 
-    # get integrity hash
+    # write integrity hash
     integrity_hash = sha256_file(FILENAME_COMBINED)
+    with open(FILENAME_COMBINED, "ab") as out_file:
+        out_file.write(integrity_hash)
 
     # encrypt combine
     salt = crypto.generate_salt(SALT_LENGTH)
@@ -331,8 +333,6 @@ def PackManifest():
 
     # write file
     with open(FILENAME_COMBINED_FINAL_UPLOAD, "wb") as out_file:
-        #write hash
-        out_file.write(integrity_hash)
         #write encrypted combined.dim
         with open(FILENAME_COMBINED_ENCRYPTED, "rb") as in_file:
             while True:
@@ -360,36 +360,23 @@ def CreateEmptyManifest():
 
 #loads already existing hashes
 def LoadArrays():
-    #read head and tail
+    #read manifest
     integrity_hash = None
     salt = None
-    with open(FILENAME_COMBINED_FINAL, "rb") as f:
-        file_size = os.path.getsize(FILENAME_COMBINED_FINAL)
-        if file_size < INTEGRITY_HASH_LENGTH + SALT_LENGTH:
-            raise ValueError("File too small")
-        # --- Head ---
-        integrity_hash = f.read(INTEGRITY_HASH_LENGTH)
-        # --- Tail ---
-        f.seek(file_size - SALT_LENGTH)
-        salt = f.read(SALT_LENGTH)
-    #cut head and tail
-    with open(FILENAME_COMBINED_FINAL, "rb") as fin, open(FILENAME_COMBINED_ENCRYPTED, "wb") as fout:
-        file_size = os.path.getsize(FILENAME_COMBINED_FINAL)
-
-        start = INTEGRITY_HASH_LENGTH
-        end = file_size - SALT_LENGTH
-        length = end - start
-
-        fin.seek(start)
-
-        while length > 0:
-            chunk = fin.read(min(BUFFER_SIZE, length))
-            if not chunk:
-                break
-            fout.write(chunk)
-            length -= len(chunk)
+    #read and cut salt
+    with open(FILENAME_COMBINED_FINAL, "r+b") as f:
+        size = os.path.getsize(FILENAME_COMBINED_FINAL)
+        f.seek(size - SALT_LENGTH)
+        salt = f.read(SALT_LENGTH)   # read the tail
+        f.truncate(size - SALT_LENGTH)     # remove it
     #decrypt
-    crypto.decrypt(FILENAME_COMBINED_ENCRYPTED, FILENAME_COMBINED, salt)
+    crypto.decrypt(FILENAME_COMBINED_FINAL, FILENAME_COMBINED, salt)
+    #read and cut integrity hash
+    with open(FILENAME_COMBINED, "r+b") as f:
+        size = os.path.getsize(FILENAME_COMBINED)
+        f.seek(size - INTEGRITY_HASH_LENGTH)
+        integrity_hash = f.read(INTEGRITY_HASH_LENGTH)   # read the tail
+        f.truncate(size - INTEGRITY_HASH_LENGTH)     # remove it
 
     #check integrity_hash
     if sha256_file(FILENAME_COMBINED) != integrity_hash:
