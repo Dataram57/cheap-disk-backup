@@ -654,22 +654,26 @@ def OptimizeContent(start_path):
                             # new_content_hashes[id_in_new] = b''
                             # salt = b''
 
-                            #copy file
                             id = -1
+                            #copy file
                             try:
-                                #copy file
                                 shutil.copy(current_target, FILENAME_TEMP_ORIGINAL)
-                                #check hash again
-                                if sha256_file(FILENAME_TEMP_ORIGINAL) != new_content_hashes[id_in_new]:
-                                    print(sha256_file(FILENAME_TEMP_ORIGINAL).hex(), new_content_hashes[id_in_new].hex())
-                                    raise
-                                #try to insert new hash
-                                id = -1
                                 try:
-                                    id = content_hashes_stay.index(False)
+                                    #check hash again
+                                    if sha256_file(FILENAME_TEMP_ORIGINAL) != new_content_hashes[id_in_new]:
+                                        print(sha256_file(FILENAME_TEMP_ORIGINAL).hex(), new_content_hashes[id_in_new].hex())
+                                        raise
+                                    #try to insert new hash
+                                    try:
+                                        id = content_hashes_stay.index(False)
+                                    except:
+                                        print("New Hash found")
+                                        id = -1
                                 except:
-                                    id = -1
+                                    print("Error: File has changed")
+                                    id = -2
                             except:
+                                print("Error: File no longer exist")
                                 id = -2
                             # update/upload or upload
                             salt = None
@@ -726,7 +730,7 @@ def OptimizeContent(start_path):
                             
                             else:
                                 #reject hash
-                                print("Altered content detected - Rejecting upload of this content!!!")
+                                print("Rejecting upload of this content!!!")
                                 salt = b''
                                 new_content_hashes[id_in_new] = b'' #only to write this bad hash (next will simply reference -2)
 
