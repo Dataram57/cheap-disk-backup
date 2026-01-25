@@ -112,6 +112,21 @@ def DimSanitize(arg):
 userIDs = []
 groupIDs = []
 
+def CopyFile(src, dst):
+    dst = Path(dst)
+
+    # ensure existing destination is writable
+    if dst.exists():
+        os.chmod(dst, dst.stat().st_mode | stat.S_IWUSR)
+
+    # copy file (shutil.copy semantics)
+    dst_path = Path(shutil.copy(src, dst))
+
+    # ensure copied file is writable
+    os.chmod(dst_path, dst_path.stat().st_mode | stat.S_IWUSR)
+
+    return str(dst_path)
+
 #================================================================
 # Content Hashes
 
@@ -657,23 +672,23 @@ def OptimizeContent(start_path):
                             id = -1
                             #copy file
                             try:
-                                shutil.copy(current_target, FILENAME_TEMP_ORIGINAL)
+                                CopyFile(current_target, FILENAME_TEMP_ORIGINAL) # this causes error
                                 try:
                                     #check hash again
                                     if sha256_file(FILENAME_TEMP_ORIGINAL) != new_content_hashes[id_in_new]:
-                                        print(sha256_file(FILENAME_TEMP_ORIGINAL).hex(), new_content_hashes[id_in_new].hex())
                                         raise
                                     #try to insert new hash
                                     try:
                                         id = content_hashes_stay.index(False)
                                     except:
-                                        print("New Hash found")
+                                        print("New content has to be uploaded")
                                         id = -1
                                 except:
                                     print("Error: File has changed")
                                     id = -2
-                            except:
-                                print("Error: File no longer exist")
+                            except  Exception as e:
+                                print(e)
+                                #print("Error: File no longer exist")
                                 id = -2
                             # update/upload or upload
                             salt = None

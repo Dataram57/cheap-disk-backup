@@ -4,6 +4,9 @@
 **.config.json
 **.bkp
 
+backup_**
+restore_**
+
 test_source/**
 test_source_link
 test_cloud/**
