@@ -630,7 +630,7 @@ def OptimizeContent(start_path):
                     #content modifier
                     if command == "*content":
                         #log
-                        print("Adding to cloud:", current_target)
+                        #print("Adding to cloud:", current_target)
                         #vars
                         id_in_new = int(args[1])
                         id = -1
@@ -638,8 +638,9 @@ def OptimizeContent(start_path):
                         if new_content_hashes_mapper[id_in_new] != -1:
                             #apply already inserted new hash
                             id = new_content_hashes_mapper[id_in_new]
-                            print("Already uploaded.")
+                            #print("Already uploaded.")
                         else:
+                            print("Adding to cloud:", current_target)
                             #copy file to temporary safe space...
                             
                             #check if file exists
@@ -660,6 +661,7 @@ def OptimizeContent(start_path):
                                 shutil.copy(current_target, FILENAME_TEMP_ORIGINAL)
                                 #check hash again
                                 if sha256_file(FILENAME_TEMP_ORIGINAL) != new_content_hashes[id_in_new]:
+                                    print(sha256_file(FILENAME_TEMP_ORIGINAL).hex(), new_content_hashes[id_in_new].hex())
                                     raise
                                 #try to insert new hash
                                 id = -1
@@ -827,6 +829,7 @@ def DeleteFile(path):
     except:
         0
 DeleteFile(FILENAME_TEMP)
+DeleteFile(FILENAME_TEMP_ORIGINAL)
 DeleteFile(FILENAME_OBJECTS)
 DeleteFile(FILENAME_HASHES)
 DeleteFile(FILENAME_COMBINED)
