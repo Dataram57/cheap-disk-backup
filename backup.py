@@ -572,15 +572,23 @@ def OptimizeContent(start_path):
     #function for writing
     def WriteNextHashes(count):
         nonlocal file_hashes_next_id
+        nonlocal dimp_hashes
         while count > 0:
             count -= 1
             args = dimp_hashes.Next()
-            file_hashes.write(DimSanitize(args[0].strip()) + "," + DimSanitize(args[1]) + ";\n")
+            file_hashes.write(DimSanitize(args[0].strip()) + "," + DimSanitize(args[1]) + ",WriteNextHashes," + str(file_hashes_next_id) + ";\n")
             file_hashes_next_id += 1
     def SkipHash():
         nonlocal file_hashes_next_id
+        nonlocal dimp_hashes
         dimp_hashes.Next()
         file_hashes_next_id += 1
+
+    #skip already considered/written hashes
+    i = 0
+    while i < file_hashes_next_id:
+        dimp_hashes.Next()
+        i += 1
 
     #mapper.dim
     file_mapper = open(FILENAME_HASHES_NEW_MAP, "a", encoding="utf-8")
@@ -725,6 +733,7 @@ def OptimizeContent(start_path):
                                 id = upload_id_gen
                                 upload_id_gen += 1
 
+                                print("upload!!!!!")
                                 #generate new entry
                                 #get salt
                                 salt = crypto.generate_salt(SALT_LENGTH)
@@ -740,7 +749,7 @@ def OptimizeContent(start_path):
                                 #skip deleting and copy remaining hashes
                                 while file_hashes_next_id < len(content_hashes):
                                     args = dimp_hashes.Next()
-                                    file_hashes.write(DimSanitize(args[0].strip()) + "," + DimSanitize(args[1].strip()) + ";\n")
+                                    file_hashes.write(DimSanitize(args[0].strip()) + "," + DimSanitize(args[1].strip()) + ",-1;\n")
                                     file_hashes_next_id += 1
                             
                             else:
@@ -796,7 +805,7 @@ def OptimizeContent(start_path):
         args = dimp_hashes.Next()
         if content_hashes_stay[file_hashes_next_id]:
             #save used hash
-            file_hashes.write(DimSanitize(args[0].strip()) + "," + DimSanitize(args[1].strip()) + ";\n")
+            file_hashes.write(DimSanitize(args[0].strip()) + "," + DimSanitize(args[1].strip()) + ", del;\n")
         else:
             #delete in the cloud (if hasn't been already deleted)
             if len(content_hashes[file_hashes_next_id]) != 0:
@@ -831,7 +840,7 @@ ScanObjects(config["targetSourceDirectory"], FILENAME_OBJECTS_TO_CORRECT)
 file_new_content_hashes.close()
 #Optimize content
 OptimizeContent(config["targetSourceDirectory"])
-
+exit(0)
 # Finishing
 PackManifest()
 while True:
@@ -840,7 +849,7 @@ while True:
 
 #================================================================
 # Cleaning
-
+exit(0)
 #delete saved files
 def DeleteFile(path):
     try:
