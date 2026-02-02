@@ -663,6 +663,7 @@ def OptimizeContent(start_path):
                             id = new_content_hashes_mapper[id_in_new]
                             #print("Already uploaded.")
                         else:
+                            print("Remaining content:", id_in_new, "/", len(new_content_hashes))
                             print("Adding to cloud:", current_target)
                             #copy file to temporary safe space...
                             
@@ -840,7 +841,6 @@ ScanObjects(config["targetSourceDirectory"], FILENAME_OBJECTS_TO_CORRECT)
 file_new_content_hashes.close()
 #Optimize content
 OptimizeContent(config["targetSourceDirectory"])
-exit(0)
 # Finishing
 PackManifest()
 while True:
@@ -849,7 +849,7 @@ while True:
 
 #================================================================
 # Cleaning
-exit(0)
+
 #delete saved files
 def DeleteFile(path):
     try:
