@@ -87,7 +87,8 @@ from pathspec import PathSpec
 from pathspec.patterns import GitWildMatchPattern
 ignore_include = PathSpec.from_lines(GitWildMatchPattern, config["ignore"]["include"])
 ignore_exclude = PathSpec.from_lines(GitWildMatchPattern, config["ignore"]["exclude"])
-def isIgnored(path) -> bool:
+
+def isIgnoredFile(path) -> bool:
     # First: does it match any ignore rule?
     if not ignore_include.match_file(path):
         return False
@@ -97,6 +98,21 @@ def isIgnored(path) -> bool:
         return False
 
     return True
+
+def isIgnoredDir(path) -> bool:
+    if not path.endswith('/'):
+        path += '/'
+
+    # First: does it match any ignore rule?
+    if not ignore_include.match_tree_files(path):
+        return False
+
+    # Second: is it explicitly excluded (un-ignored)?
+    if ignore_exclude.match_tree_files(path):
+        return False
+
+    return True
+
 
 SALT_LENGTH = int(config["crypto"]["saltLength"])
 
@@ -265,8 +281,8 @@ def ScanObjects(start_path, output_path):
             root_relative = os.path.join(root_relative, os.path.basename(root))
 
             #check if dir is skipped
-            if isIgnored(root_relative):
-                print("Ignored.")
+            if isIgnoredDir(root_relative):
+                print("Ignored Dir.")
                 continue
 
             #register dir info
@@ -291,8 +307,8 @@ def ScanObjects(start_path, output_path):
                 continue
             
             #ignore
-            if isIgnored(pathRelative):
-                print("Ignored.")
+            if isIgnoredFile(pathRelative):
+                print("Ignored File.")
                 continue
 
             #rest
